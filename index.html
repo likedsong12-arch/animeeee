@@ -371,15 +371,134 @@
             text-align: center;
         }
 
+        /* Search Modal */
+        .search-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            backdrop-filter: blur(5px);
+        }
+
+        .search-modal-content {
+            background: rgba(30, 41, 59, 0.95);
+            border-radius: 15px;
+            padding: 2rem;
+            max-width: 800px;
+            max-height: 80vh;
+            margin: 5% auto;
+            overflow-y: auto;
+            border: 1px solid rgba(124, 58, 237, 0.3);
+        }
+
+        .search-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .search-results {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .anime-card {
+            background: rgba(15, 23, 42, 0.8);
+            border-radius: 10px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .anime-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--primary);
+        }
+
+        .anime-card img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+        }
+
+        .anime-card-info {
+            padding: 10px;
+        }
+
+        .anime-card h4 {
+            margin-bottom: 5px;
+            color: var(--light);
+        }
+
+        .anime-card p {
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+
+        /* Chat message styling */
+        .chat-message {
+            margin-bottom: 10px;
+            padding: 8px;
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 10px;
+        }
+
+        .chat-message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .chat-message-username {
+            color: var(--primary-light);
+            font-weight: 600;
+        }
+
+        .chat-message-time {
+            color: var(--gray);
+            font-size: 0.8rem;
+        }
+
+        .chat-message-text {
+            color: var(--light);
+        }
+
         /* Responsive design */
         @media (max-width: 768px) {
             .room-content {
                 flex-direction: column;
             }
-
+            
             .btn {
                 width: 100% !important;
             }
+
+            .search-results {
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            }
+        }
+
+        /* Video info */
+        .video-info {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: rgba(15, 23, 42, 0.8);
+            border-radius: 10px;
+        }
+
+        .current-video-title {
+            color: var(--primary-light);
+            font-weight: 600;
+            margin-bottom: 5px;
         }
     </style>
 </head>
@@ -456,8 +575,7 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Room ID</label>
-                    <input type="text" class="form-input" id="roomIdInput" placeholder="Enter room ID" value="ANIME123"
-                        readonly>
+                    <input type="text" class="form-input" id="roomIdInput" placeholder="Enter room ID" value="ANIME123" readonly>
                 </div>
                 <button class="btn btn-primary" id="enterRoomBtn">
                     <i class="fas fa-door-open"></i> Enter Room
@@ -485,21 +603,24 @@
                     <div class="video-player">
                         <div style="text-align: center;">
                             <i class="fas fa-play-circle" style="font-size: 3rem; margin-bottom: 1rem;"></i>
-                            <p>Video player will be here</p>
-                            <p>Room ID: <span id="videoRoomId">ANIME123</span></p>
+                            <p id="videoStatus">Click "Search Anime" to select a video</p>
                         </div>
                     </div>
+                    
+                    <div class="video-info" id="videoInfo" style="display: none;">
+                        <div class="current-video-title" id="currentVideoTitle"></div>
+                        <div style="color: var(--gray); font-size: 0.9rem;" id="currentVideoUrl"></div>
+                    </div>
+                    
                     <div class="video-controls">
-                        <button class="btn btn-primary" style="width: auto;">
+                        <button class="btn btn-primary" style="width: auto;" id="playBtn">
                             <i class="fas fa-play"></i> Play
                         </button>
-                        <button class="btn btn-secondary" style="width: auto;">
+                        <button class="btn btn-secondary" style="width: auto;" id="pauseBtn">
                             <i class="fas fa-pause"></i> Pause
                         </button>
-                        <input type="text" class="form-input" style="flex: 1;" placeholder="Enter video URL"
-                            id="videoUrlInput">
-                        <button class="btn btn-primary" style="width: auto;" id="syncVideoBtn">
-                            <i class="fas fa-sync-alt"></i> Sync
+                        <button class="btn btn-primary" style="width: auto;" id="searchAnimeBtn">
+                            <i class="fas fa-search"></i> Search Anime
                         </button>
                     </div>
                 </div>
@@ -509,11 +630,14 @@
                     <h3 style="margin-bottom: 1rem; color: var(--primary-light);">
                         <i class="fas fa-comments"></i> Chat
                     </h3>
-
+                    
                     <div class="chat-messages" id="chatMessages">
-                        <!-- Chat messages will appear here -->
+                        <div style="text-align: center; color: var(--gray); padding: 20px;">
+                            <i class="fas fa-comments" style="font-size: 2rem; margin-bottom: 10px;"></i>
+                            <p>No messages yet. Start the conversation!</p>
+                        </div>
                     </div>
-
+                    
                     <div class="chat-input-container">
                         <input type="text" id="chatInput" class="form-input" placeholder="Type a message...">
                         <button id="sendMessageBtn" class="btn btn-primary" style="width: auto;">
@@ -531,6 +655,32 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Modal -->
+    <div class="search-modal" id="searchModal">
+        <div class="search-modal-content">
+            <div class="search-header">
+                <h3 style="color: var(--primary-light);">
+                    <i class="fas fa-search"></i> Search Anime
+                </h3>
+                <button id="closeSearchModal" class="btn btn-secondary" style="width: auto;">
+                    <i class="fas fa-times"></i> Close
+                </button>
+            </div>
+            
+            <div class="form-group">
+                <input type="text" id="animeSearchInput" class="form-input" placeholder="Search for anime (e.g., Naruto, One Piece, Attack on Titan)">
+            </div>
+            
+            <button id="searchAnimeBtn" class="btn btn-primary">
+                <i class="fas fa-search"></i> Search
+            </button>
+            
+            <div class="search-results" id="searchResults">
+                <!-- Search results will appear here -->
             </div>
         </div>
     </div>
@@ -571,21 +721,29 @@
         const avatarOptions = document.querySelectorAll('.avatar-option');
         const roomIdInput = document.getElementById('roomIdInput');
         const displayRoomId = document.getElementById('displayRoomId');
-        const videoRoomId = document.getElementById('videoRoomId');
         const leaveRoomBtn = document.getElementById('leaveRoomBtn');
         const chatMessages = document.getElementById('chatMessages');
         const chatInput = document.getElementById('chatInput');
         const sendMessageBtn = document.getElementById('sendMessageBtn');
         const roomUsers = document.getElementById('roomUsers');
-        const videoUrlInput = document.getElementById('videoUrlInput');
-        const syncVideoBtn = document.getElementById('syncVideoBtn');
+        const searchModal = document.getElementById('searchModal');
+        const closeSearchModal = document.getElementById('closeSearchModal');
+        const searchAnimeBtn = document.getElementById('searchAnimeBtn');
+        const animeSearchInput = document.getElementById('animeSearchInput');
+        const searchResults = document.getElementById('searchResults');
+        const videoStatus = document.getElementById('videoStatus');
+        const videoInfo = document.getElementById('videoInfo');
+        const currentVideoTitle = document.getElementById('currentVideoTitle');
+        const currentVideoUrl = document.getElementById('currentVideoUrl');
+        const playBtn = document.getElementById('playBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
 
         // ==================== INITIALIZATION ====================
         document.addEventListener('DOMContentLoaded', initApp);
 
         function initApp() {
             setupEventListeners();
-
+            
             // Check auth state
             auth.onAuthStateChanged((user) => {
                 if (user) {
@@ -647,8 +805,16 @@
             // Room interface buttons
             leaveRoomBtn.addEventListener('click', leaveRoom);
             sendMessageBtn.addEventListener('click', sendMessage);
-            syncVideoBtn.addEventListener('click', syncVideo);
-
+            
+            // Video controls
+            document.getElementById('searchAnimeBtn').addEventListener('click', openSearchModal);
+            playBtn.addEventListener('click', playVideo);
+            pauseBtn.addEventListener('click', pauseVideo);
+            
+            // Search modal
+            closeSearchModal.addEventListener('click', closeModal);
+            document.getElementById('searchAnimeBtn').addEventListener('click', searchAnime);
+            
             // Enter key handlers
             document.getElementById('loginPassword').addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') login();
@@ -662,8 +828,15 @@
                 if (e.key === 'Enter') sendMessage();
             });
 
-            videoUrlInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') syncVideo();
+            animeSearchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') searchAnime();
+            });
+
+            // Close modal when clicking outside
+            window.addEventListener('click', (e) => {
+                if (e.target === searchModal) {
+                    closeModal();
+                }
             });
         }
 
@@ -760,20 +933,20 @@
 
         async function loginWithGoogle() {
             showLoading('Connecting to Google...');
-
+            
             try {
                 const provider = new firebase.auth.GoogleAuthProvider();
-
+                
                 // Add scopes for user info
                 provider.addScope('profile');
                 provider.addScope('email');
-
+                
                 const result = await auth.signInWithPopup(provider);
                 const user = result.user;
 
                 // Check if user exists in Firestore
                 const userDoc = await db.collection('users').doc(user.uid).get();
-
+                
                 if (!userDoc.exists) {
                     // Create user profile
                     await db.collection('users').doc(user.uid).set({
@@ -794,17 +967,17 @@
 
                 showMessage('Signed in with Google! Welcome ' + (user.displayName || user.email), 'success');
                 console.log('Google login successful:', user.uid);
-
+                
             } catch (error) {
                 console.error('Google login error details:', error);
-
+                
                 // Better error messages
                 if (error.code === 'auth/unauthorized-domain') {
                     showMessage(
                         'Domain not authorized. Please add "likedsong12-arch.github.io" to Firebase Authorized Domains.',
                         'error'
                     );
-
+                    
                     // Show help message with link
                     showMessage(
                         'Fix: Go to Firebase Console → Authentication → Settings → Add domain: "likedsong12-arch.github.io"',
@@ -840,14 +1013,14 @@
                         name: `${currentUser.displayName || 'User'}'s Anime Room`,
                         users: [currentUser.uid],
                         currentVideo: null,
-                        isPlaying: false,
-                        messages: []
+                        currentVideoTitle: null,
+                        isPlaying: false
                     });
                     showMessage(`Room ${roomId} created! Share this ID with friends.`, 'success');
                 } else {
                     // Join room
                     const roomDoc = await db.collection('rooms').doc(roomId).get();
-
+                    
                     if (!roomDoc.exists) {
                         showMessage('Room not found', 'error');
                         return;
@@ -862,12 +1035,11 @@
                 // Set current room and show room interface
                 currentRoomId = roomId;
                 displayRoomId.textContent = roomId;
-                videoRoomId.textContent = roomId;
-
+                
                 // Hide auth container and show room interface
                 authContainer.style.display = 'none';
                 roomInterface.style.display = 'block';
-
+                
                 // Start listening to room updates
                 setupRoomListeners(roomId);
 
@@ -877,47 +1049,44 @@
             }
         }
 
-        async function syncVideo() {
-            const videoUrl = videoUrlInput.value.trim();
-            if (!videoUrl || !currentRoomId) return;
-
-            try {
-                await db.collection('rooms').doc(currentRoomId).update({
-                    currentVideo: videoUrl,
-                    isPlaying: false
-                });
-                showMessage('Video URL synced!', 'success');
-            } catch (error) {
-                showMessage('Error syncing video: ' + error.message, 'error');
-            }
-        }
-
         function setupRoomListeners(roomId) {
             // Stop previous listener if exists
             if (roomUnsubscribe) {
                 roomUnsubscribe();
             }
-
+            
             // Listen for room updates
             roomUnsubscribe = db.collection('rooms').doc(roomId).onSnapshot((doc) => {
                 if (doc.exists) {
                     const room = doc.data();
                     updateRoomUsers(room.users || []);
-                    updateChat(room.messages || []);
-
-                    // Update video if exists
+                    
+                    // Update video info if exists
                     if (room.currentVideo) {
-                        videoUrlInput.value = room.currentVideo;
+                        videoStatus.textContent = 'Currently playing:';
+                        videoInfo.style.display = 'block';
+                        currentVideoTitle.textContent = room.currentVideoTitle || 'Anime Video';
+                        currentVideoUrl.textContent = room.currentVideo;
+                    } else {
+                        videoStatus.textContent = 'Click "Search Anime" to select a video';
+                        videoInfo.style.display = 'none';
                     }
                 }
             }, (error) => {
                 console.error('Room listener error:', error);
             });
+
+            // Listen for chat messages in subcollection
+            db.collection('rooms').doc(roomId).collection('messages')
+                .orderBy('timestamp', 'asc')
+                .onSnapshot((snapshot) => {
+                    updateChat(snapshot.docs.map(doc => doc.data()));
+                });
         }
 
         async function updateRoomUsers(userIds) {
             roomUsers.innerHTML = '';
-
+            
             for (const userId of userIds) {
                 try {
                     const userDoc = await db.collection('users').doc(userId).get();
@@ -936,57 +1105,61 @@
 
         function updateChat(messages) {
             chatMessages.innerHTML = '';
-
+            
             if (!messages || messages.length === 0) {
-                chatMessages.innerHTML = '<div style="text-align: center; color: var(--gray); padding: 20px;">No messages yet. Start the conversation!</div>';
+                chatMessages.innerHTML = `
+                    <div style="text-align: center; color: var(--gray); padding: 20px;">
+                        <i class="fas fa-comments" style="font-size: 2rem; margin-bottom: 10px;"></i>
+                        <p>No messages yet. Start the conversation!</p>
+                    </div>
+                `;
                 return;
             }
-
+            
             messages.forEach(msg => {
                 const msgElement = document.createElement('div');
-                msgElement.style.marginBottom = '10px';
-                msgElement.style.padding = '8px';
-                msgElement.style.background = 'rgba(30, 41, 59, 0.5)';
-                msgElement.style.borderRadius = '5px';
+                msgElement.className = 'chat-message';
                 msgElement.innerHTML = `
-                    <strong style="color: var(--primary-light);">${msg.username || 'User'}:</strong>
-                    <span>${msg.text}</span>
-                    <div style="font-size: 0.8em; color: var(--gray);">${formatTime(msg.timestamp)}</div>
+                    <div class="chat-message-header">
+                        <span class="chat-message-username">${msg.username || 'User'}</span>
+                        <span class="chat-message-time">${formatTime(msg.timestamp)}</span>
+                    </div>
+                    <div class="chat-message-text">${msg.text}</div>
                 `;
                 chatMessages.appendChild(msgElement);
             });
-
+            
             // Scroll to bottom
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
         function formatTime(timestamp) {
             if (!timestamp) return '';
-            const date = timestamp.toDate();
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            try {
+                const date = timestamp.toDate();
+                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            } catch (error) {
+                return '';
+            }
         }
 
         async function sendMessage() {
             const text = chatInput.value.trim();
             if (!text || !currentRoomId || !currentUser) return;
-
+            
             try {
-                const roomRef = db.collection('rooms').doc(currentRoomId);
-                const roomDoc = await roomRef.get();
-                const messages = roomDoc.data().messages || [];
-
                 // Get user profile for username
                 const userDoc = await db.collection('users').doc(currentUser.uid).get();
                 const userData = userDoc.exists ? userDoc.data() : { username: 'User' };
-
-                messages.push({
+                
+                // Add message to subcollection
+                await db.collection('rooms').doc(currentRoomId).collection('messages').add({
                     userId: currentUser.uid,
                     username: userData.username || currentUser.displayName || 'Anonymous',
                     text: text,
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
-
-                await roomRef.update({ messages: messages });
+                
                 chatInput.value = '';
             } catch (error) {
                 console.error('Error sending message:', error);
@@ -996,29 +1169,35 @@
 
         async function leaveRoom() {
             if (!currentRoomId) return;
-
+            
             try {
                 // Remove user from room
                 await db.collection('rooms').doc(currentRoomId).update({
                     users: firebase.firestore.FieldValue.arrayRemove(currentUser.uid)
                 });
-
+                
                 // Stop room listener
                 if (roomUnsubscribe) {
                     roomUnsubscribe();
                     roomUnsubscribe = null;
                 }
-
+                
                 // Hide room interface and show auth container
                 roomInterface.style.display = 'none';
                 authContainer.style.display = 'block';
                 currentRoomId = null;
-
+                
                 // Clear chat
-                chatMessages.innerHTML = '';
+                chatMessages.innerHTML = `
+                    <div style="text-align: center; color: var(--gray); padding: 20px;">
+                        <i class="fas fa-comments" style="font-size: 2rem; margin-bottom: 10px;"></i>
+                        <p>No messages yet. Start the conversation!</p>
+                    </div>
+                `;
                 roomUsers.innerHTML = '';
-                videoUrlInput.value = '';
-
+                videoInfo.style.display = 'none';
+                videoStatus.textContent = 'Click "Search Anime" to select a video';
+                
                 showMessage('Left the room', 'success');
             } catch (error) {
                 showMessage('Error leaving room: ' + error.message, 'error');
@@ -1031,7 +1210,7 @@
                 if (currentRoomId) {
                     await leaveRoom();
                 }
-
+                
                 await auth.signOut();
                 showMessage('Logged out successfully', 'success');
                 showTab('login');
@@ -1053,6 +1232,186 @@
             }
         }
 
+        // ==================== VIDEO FUNCTIONS ====================
+        function openSearchModal() {
+            searchModal.style.display = 'block';
+            animeSearchInput.focus();
+        }
+
+        function closeModal() {
+            searchModal.style.display = 'none';
+            animeSearchInput.value = '';
+            searchResults.innerHTML = '';
+        }
+
+        async function searchAnime() {
+            const query = animeSearchInput.value.trim();
+            if (!query) return;
+
+            showLoading('Searching for anime...', searchModal);
+
+            try {
+                // Mock anime data (in a real app, you'd use an API like AniList, MyAnimeList, or Gogoanime)
+                const mockAnimeData = [
+                    {
+                        id: 1,
+                        title: "Naruto Shippuden",
+                        description: "Naruto Uzumaki returns to his village after two years of training.",
+                        image: "https://cdn.myanimelist.net/images/anime/5/17407.jpg",
+                        url: "https://example.com/naruto-ep1"
+                    },
+                    {
+                        id: 2,
+                        title: "One Piece",
+                        description: "Monkey D. Luffy and his pirate crew explore the Grand Line.",
+                        image: "https://cdn.myanimelist.net/images/anime/6/73245.jpg",
+                        url: "https://example.com/onepiece-ep1"
+                    },
+                    {
+                        id: 3,
+                        title: "Attack on Titan",
+                        description: "Humanity fights for survival against giant humanoid Titans.",
+                        image: "https://cdn.myanimelist.net/images/anime/10/47347.jpg",
+                        url: "https://example.com/aot-ep1"
+                    },
+                    {
+                        id: 4,
+                        title: "Demon Slayer",
+                        description: "Tanjiro Kamado becomes a demon slayer after his family is slaughtered.",
+                        image: "https://cdn.myanimelist.net/images/anime/1286/99889.jpg",
+                        url: "https://example.com/demonslayer-ep1"
+                    },
+                    {
+                        id: 5,
+                        title: "My Hero Academia",
+                        description: "Izuku Midoriya enrolls in a school for superheroes.",
+                        image: "https://cdn.myanimelist.net/images/anime/10/78745.jpg",
+                        url: "https://example.com/mha-ep1"
+                    },
+                    {
+                        id: 6,
+                        title: "Jujutsu Kaisen",
+                        description: "Yuji Itadori joins a secret organization of Jujutsu Sorcerers.",
+                        image: "https://cdn.myanimelist.net/images/anime/1171/109222.jpg",
+                        url: "https://example.com/jjk-ep1"
+                    }
+                ];
+
+                // Filter based on search query
+                const filteredAnime = mockAnimeData.filter(anime => 
+                    anime.title.toLowerCase().includes(query.toLowerCase()) ||
+                    anime.description.toLowerCase().includes(query.toLowerCase())
+                );
+
+                displaySearchResults(filteredAnime);
+
+            } catch (error) {
+                console.error('Error searching anime:', error);
+                showMessage('Search failed: ' + error.message, 'error');
+            }
+        }
+
+        function displaySearchResults(animeList) {
+            searchResults.innerHTML = '';
+
+            if (animeList.length === 0) {
+                searchResults.innerHTML = `
+                    <div style="grid-column: 1 / -1; text-align: center; color: var(--gray); padding: 20px;">
+                        <i class="fas fa-search" style="font-size: 2rem; margin-bottom: 10px;"></i>
+                        <p>No anime found. Try a different search term.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            animeList.forEach(anime => {
+                const animeCard = document.createElement('div');
+                animeCard.className = 'anime-card';
+                animeCard.innerHTML = `
+                    <img src="${anime.image}" alt="${anime.title}" onerror="this.src='https://via.placeholder.com/180x200/1e293b/ffffff?text=Anime'">
+                    <div class="anime-card-info">
+                        <h4>${anime.title}</h4>
+                        <p>${anime.description}</p>
+                    </div>
+                `;
+
+                animeCard.addEventListener('click', () => selectAnime(anime));
+                searchResults.appendChild(animeCard);
+            });
+        }
+
+        async function selectAnime(anime) {
+            if (!currentRoomId) return;
+
+            try {
+                // Update room with selected anime
+                await db.collection('rooms').doc(currentRoomId).update({
+                    currentVideo: anime.url,
+                    currentVideoTitle: anime.title,
+                    isPlaying: false
+                });
+
+                // Update local display
+                videoStatus.textContent = 'Currently playing:';
+                videoInfo.style.display = 'block';
+                currentVideoTitle.textContent = anime.title;
+                currentVideoUrl.textContent = anime.url;
+
+                // Send a chat message about the video change
+                await sendSystemMessage(`${currentUser.displayName || 'User'} changed the video to: ${anime.title}`);
+
+                closeModal();
+                showMessage(`Now playing: ${anime.title}`, 'success');
+
+            } catch (error) {
+                console.error('Error selecting anime:', error);
+                showMessage('Failed to select anime', 'error');
+            }
+        }
+
+        async function playVideo() {
+            if (!currentRoomId) return;
+
+            try {
+                await db.collection('rooms').doc(currentRoomId).update({
+                    isPlaying: true
+                });
+                showMessage('Video playing', 'success');
+            } catch (error) {
+                console.error('Error playing video:', error);
+                showMessage('Failed to play video', 'error');
+            }
+        }
+
+        async function pauseVideo() {
+            if (!currentRoomId) return;
+
+            try {
+                await db.collection('rooms').doc(currentRoomId).update({
+                    isPlaying: false
+                });
+                showMessage('Video paused', 'success');
+            } catch (error) {
+                console.error('Error pausing video:', error);
+                showMessage('Failed to pause video', 'error');
+            }
+        }
+
+        async function sendSystemMessage(text) {
+            if (!currentRoomId) return;
+            
+            try {
+                await db.collection('rooms').doc(currentRoomId).collection('messages').add({
+                    userId: 'system',
+                    username: 'System',
+                    text: text,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            } catch (error) {
+                console.error('Error sending system message:', error);
+            }
+        }
+
         // ==================== UI HELPER FUNCTIONS ====================
         function showMessage(message, type = 'info') {
             messageContainer.innerHTML = `
@@ -1060,25 +1419,30 @@
                     ${message}
                 </div>
             `;
-
+            
             // Auto-remove after 5 seconds
             setTimeout(() => {
                 messageContainer.innerHTML = '';
             }, 5000);
         }
 
-        function showLoading(message) {
-            messageContainer.innerHTML = `
-                <div class="loading">
-                    <div class="loading-spinner"></div>
-                    <div>${message}</div>
-                </div>
+        function showLoading(message, container = document.body) {
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'loading';
+            loadingDiv.innerHTML = `
+                <div class="loading-spinner"></div>
+                <div>${message}</div>
             `;
+            
+            if (container === document.body) {
+                messageContainer.innerHTML = loadingDiv.outerHTML;
+            } else {
+                container.innerHTML = loadingDiv.outerHTML;
+            }
         }
 
         // Initialize room input
         updateRoomInput('create');
     </script>
 </body>
-
 </html>
