@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anime Together - Watch Anime with Friends</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Quicksand:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --primary: #7c3aed;
+            --primary-light: #a78bfa;
+            --secondary: #f472b6;
+            --dark: #1f2937;
+            --darker: #111827;
+            --light: #f9fafb;
+            --gray: #6b7280;
+            --success: #10b981;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #0f172a, #1e293b);
+            color: var(--light);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .auth-container {
+            max-width: 400px;
+            margin: 50px auto;
+            padding: 2rem;
+            background: rgba(30, 41, 59, 0.9);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+            backdrop-filter: blur(10px);
+        }
+
+        .room-interface {
+            display: none;
+            padding: 2rem;
+        }
+
+        .room-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .room-title {
+            color: var(--primary-light);
+            font-size: 1.8rem;
+        }
+
+        .room-content {
+            display: flex;
+            gap: 2rem;
+        }
+
+        .video-section {
+            flex: 3;
+            background: rgba(15, 23, 42, 0.8);
+            border-radius: 15px;
+            padding: 1rem;
+        }
+
+        .video-player {
+            background: #000;
+            aspect-ratio: 16/9;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--gray);
+            margin-bottom: 1rem;
+        }
+
+        .video-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .chat-section {
+            flex: 1;
+            background: rgba(15, 23, 42, 0.8);
+            border-radius: 15px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-messages {
+            flex: 1;
+            min-height: 300px;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-bottom: 1rem;
+            padding: 10px;
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 10px;
+        }
+
+        .chat-input-container {
+            display: flex;
+            gap: 10px;
+        }
+
+        .room-users {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid rgba(124, 58, 237, 0.3);
+        }
+
+        .user-item {
+            padding: 5px 10px;
+            margin-bottom: 5px;
+            background: rgba(124, 58, 237, 0.1);
+            border-radius: 5px;
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .logo h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .logo p {
+            color: var(--gray);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
+            color: var(--primary-light);
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(15, 23, 42, 0.8);
+            border: 2px solid rgba(124, 58, 237, 0.3);
+            border-radius: 10px;
+            color: white;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.2);
+        }
+
+        .btn {
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), #6d28d9);
+            color: white;
+            width: 100%;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(124, 58, 237, 0.3);
+        }
+
+        .btn-secondary {
+            background: rgba(30, 41, 59, 0.8);
+            color: var(--light);
+            border: 1px solid var(--gray);
+            margin-top: 10px;
+            width: 100%;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(51, 65, 85, 0.8);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 2rem;
+            background: rgba(15, 23, 42, 0.8);
+            padding: 5px;
+            border-radius: 10px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            background: transparent;
+            border: none;
+            color: var(--gray);
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .tab.active {
+            background: rgba(124, 58, 237, 0.2);
+            color: var(--primary-light);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .avatar-selection {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin: 1rem 0;
+        }
+
+        .avatar-option {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 3px solid transparent;
+        }
+
+        .avatar-option.selected {
+            border-color: var(--primary);
+            transform: scale(1.1);
+        }
+
+        .avatar-1 {
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        }
+
+        .avatar-2 {
+            background: linear-gradient(135deg, #ec4899, #be185d);
+        }
+
+        .avatar-3 {
+            background: linear-gradient(135deg, #10b981, #047857);
+        }
+
+        .avatar-4 {
+            background: linear-gradient(135deg, #f59e0b, #b45309);
+        }
+
+        .room-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 1rem;
+        }
+
+        .room-action-btn {
+            flex: 1;
+            padding: 12px;
+            background: rgba(15, 23, 42, 0.8);
+            border: 2px solid rgba(124, 58, 237, 0.3);
+            border-radius: 10px;
+            color: var(--light);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .room-action-btn.active {
+            background: rgba(124, 58, 237, 0.2);
+            border-color: var(--primary);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: var(--primary-light);
+        }
+
+        .loading-spinner {
+            border: 3px solid rgba(124, 58, 237, 0.2);
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .success-message {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #34d399;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .info-message {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: #93c5fd;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .room-content {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100% !important;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Auth Container (Login/Register/Room Creation) -->
+        <div class="auth-container" id="authContainer">
+            <div class="logo">
+                <h1>🎌 Anime Together</h1>
+                <p>Watch anime with friends in real-time</p>
+            </div>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="login">Login</button>
+                <button class="tab" data-tab="register">Register</button>
+                <button class="tab" data-tab="room">Room</button>
+            </div>
+
+            <!-- Login Tab -->
+            <div class="tab-content active" id="loginTab">
+                <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <input type="email" class="form-input" id="loginEmail" placeholder="your@email.com">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <input type="password" class="form-input" id="loginPassword" placeholder="••••••••">
+                </div>
+                <button class="btn btn-primary" id="loginBtn">
+                    <i class="fas fa-sign-in-alt"></i> Login
+                </button>
+                <button class="btn btn-secondary" id="googleLoginBtn">
+                    <i class="fab fa-google"></i> Login with Google
+                </button>
+            </div>
+
+            <!-- Register Tab -->
+            <div class="tab-content" id="registerTab">
+                <div class="form-group">
+                    <label class="form-label">Username</label>
+                    <input type="text" class="form-input" id="registerUsername" placeholder="Choose a cool name">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <input type="email" class="form-input" id="registerEmail" placeholder="your@email.com">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <input type="password" class="form-input" id="registerPassword" placeholder="Minimum 6 characters">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Avatar Color</label>
+                    <div class="avatar-selection">
+                        <div class="avatar-option avatar-1 selected" data-avatar="1"><i class="fas fa-user"></i></div>
+                        <div class="avatar-option avatar-2" data-avatar="2"><i class="fas fa-user"></i></div>
+                        <div class="avatar-option avatar-3" data-avatar="3"><i class="fas fa-user"></i></div>
+                        <div class="avatar-option avatar-4" data-avatar="4"><i class="fas fa-user"></i></div>
+                    </div>
+                </div>
+                <button class="btn btn-primary" id="registerBtn">
+                    <i class="fas fa-user-plus"></i> Create Account
+                </button>
+            </div>
+
+            <!-- Room Tab -->
+            <div class="tab-content" id="roomTab">
+                <div class="form-group">
+                    <label class="form-label">Room Action</label>
+                    <div class="room-actions">
+                        <button class="room-action-btn active" data-action="create">Create Room</button>
+                        <button class="room-action-btn" data-action="join">Join Room</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Room ID</label>
+                    <input type="text" class="form-input" id="roomIdInput" placeholder="Enter room ID" value="ANIME123"
+                        readonly>
+                </div>
+                <button class="btn btn-primary" id="enterRoomBtn">
+                    <i class="fas fa-door-open"></i> Enter Room
+                </button>
+                <button class="btn btn-secondary" id="logoutBtn">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </button>
+            </div>
+
+            <div id="messageContainer"></div>
+        </div>
+
+        <!-- Room Interface (Initially Hidden) -->
+        <div class="room-interface" id="roomInterface">
+            <div class="room-header">
+                <h2 class="room-title">🎬 Room: <span id="displayRoomId">ANIME123</span></h2>
+                <button id="leaveRoomBtn" class="btn btn-secondary" style="width: auto;">
+                    <i class="fas fa-door-closed"></i> Leave Room
+                </button>
+            </div>
+
+            <div class="room-content">
+                <!-- Video Player Section -->
+                <div class="video-section">
+                    <div class="video-player">
+                        <div style="text-align: center;">
+                            <i class="fas fa-play-circle" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+                            <p>Video player will be here</p>
+                            <p>Room ID: <span id="videoRoomId">ANIME123</span></p>
+                        </div>
+                    </div>
+                    <div class="video-controls">
+                        <button class="btn btn-primary" style="width: auto;">
+                            <i class="fas fa-play"></i> Play
+                        </button>
+                        <button class="btn btn-secondary" style="width: auto;">
+                            <i class="fas fa-pause"></i> Pause
+                        </button>
+                        <input type="text" class="form-input" style="flex: 1;" placeholder="Enter video URL"
+                            id="videoUrlInput">
+                        <button class="btn btn-primary" style="width: auto;" id="syncVideoBtn">
+                            <i class="fas fa-sync-alt"></i> Sync
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Chat Section -->
+                <div class="chat-section">
+                    <h3 style="margin-bottom: 1rem; color: var(--primary-light);">
+                        <i class="fas fa-comments"></i> Chat
+                    </h3>
+
+                    <div class="chat-messages" id="chatMessages">
+                        <!-- Chat messages will appear here -->
+                    </div>
+
+                    <div class="chat-input-container">
+                        <input type="text" id="chatInput" class="form-input" placeholder="Type a message...">
+                        <button id="sendMessageBtn" class="btn btn-primary" style="width: auto;">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+
+                    <!-- Users in Room -->
+                    <div class="room-users">
+                        <h4 style="color: var(--primary-light); margin-bottom: 0.5rem;">
+                            <i class="fas fa-users"></i> Users in Room
+                        </h4>
+                        <div id="roomUsers">
+                            <!-- Users will appear here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <script>
+        // ==================== FIREBASE CONFIG ====================
+        const firebaseConfig = {
+            apiKey: "AIzaSyDUh7LtvUznCE8STn8YPRlSrbPuKIz2ZtE",
+            authDomain: "anime-a4c3f.firebaseapp.com",
+            projectId: "anime-a4c3f",
+            storageBucket: "anime-a4c3f.firebasestorage.app",
+            messagingSenderId: "1065538635432",
+            appId: "1:1065538635432:web:dab3c183447bef9481649d"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // ==================== APP STATE ====================
+        let currentUser = null;
+        let currentRoomId = null;
+        let roomUnsubscribe = null;
+
+        // ==================== DOM ELEMENTS ====================
+        const authContainer = document.getElementById('authContainer');
+        const roomInterface = document.getElementById('roomInterface');
+        const messageContainer = document.getElementById('messageContainer');
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+        const roomActionBtns = document.querySelectorAll('.room-action-btn');
+        const avatarOptions = document.querySelectorAll('.avatar-option');
+        const roomIdInput = document.getElementById('roomIdInput');
+        const displayRoomId = document.getElementById('displayRoomId');
+        const videoRoomId = document.getElementById('videoRoomId');
+        const leaveRoomBtn = document.getElementById('leaveRoomBtn');
+        const chatMessages = document.getElementById('chatMessages');
+        const chatInput = document.getElementById('chatInput');
+        const sendMessageBtn = document.getElementById('sendMessageBtn');
+        const roomUsers = document.getElementById('roomUsers');
+        const videoUrlInput = document.getElementById('videoUrlInput');
+        const syncVideoBtn = document.getElementById('syncVideoBtn');
+
+        // ==================== INITIALIZATION ====================
+        document.addEventListener('DOMContentLoaded', initApp);
+
+        function initApp() {
+            setupEventListeners();
+
+            // Check auth state
+            auth.onAuthStateChanged((user) => {
+                if (user) {
+                    // User is logged in
+                    currentUser = user;
+                    showMessage('Welcome back!', 'success');
+                    showTab('room');
+                    updateUserProfile(user);
+                } else {
+                    // No user logged in
+                    showTab('login');
+                    currentUser = null;
+                }
+            });
+        }
+
+        function setupEventListeners() {
+            // Tab switching
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const tabName = tab.getAttribute('data-tab');
+                    showTab(tabName);
+                });
+            });
+
+            // Room action switching
+            roomActionBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    roomActionBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    const action = btn.getAttribute('data-action');
+                    updateRoomInput(action);
+                });
+            });
+
+            // Avatar selection
+            avatarOptions.forEach(option => {
+                option.addEventListener('click', () => {
+                    avatarOptions.forEach(opt => opt.classList.remove('selected'));
+                    option.classList.add('selected');
+                });
+            });
+
+            // Login button
+            document.getElementById('loginBtn').addEventListener('click', login);
+
+            // Register button
+            document.getElementById('registerBtn').addEventListener('click', register);
+
+            // Google login
+            document.getElementById('googleLoginBtn').addEventListener('click', loginWithGoogle);
+
+            // Enter room
+            document.getElementById('enterRoomBtn').addEventListener('click', enterRoom);
+
+            // Logout
+            document.getElementById('logoutBtn').addEventListener('click', logout);
+
+            // Room interface buttons
+            leaveRoomBtn.addEventListener('click', leaveRoom);
+            sendMessageBtn.addEventListener('click', sendMessage);
+            syncVideoBtn.addEventListener('click', syncVideo);
+
+            // Enter key handlers
+            document.getElementById('loginPassword').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') login();
+            });
+
+            document.getElementById('registerPassword').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') register();
+            });
+
+            chatInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendMessage();
+            });
+
+            videoUrlInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') syncVideo();
+            });
+        }
+
+        function showTab(tabName) {
+            // Update tabs
+            tabs.forEach(tab => {
+                tab.classList.toggle('active', tab.getAttribute('data-tab') === tabName);
+            });
+
+            // Update tab contents
+            tabContents.forEach(content => {
+                content.classList.toggle('active', content.id === tabName + 'Tab');
+            });
+        }
+
+        function updateRoomInput(action) {
+            if (action === 'create') {
+                roomIdInput.value = generateRoomId();
+                roomIdInput.readOnly = true;
+                roomIdInput.placeholder = 'Auto-generated room ID';
+            } else {
+                roomIdInput.value = '';
+                roomIdInput.readOnly = false;
+                roomIdInput.placeholder = 'Enter room ID to join';
+            }
+        }
+
+        function generateRoomId() {
+            return 'ANIME' + Math.random().toString(36).substring(2, 8).toUpperCase();
+        }
+
+        // ==================== FIREBASE FUNCTIONS ====================
+        async function login() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+
+            if (!email || !password) {
+                showMessage('Please enter email and password', 'error');
+                return;
+            }
+
+            showLoading('Logging in...');
+
+            try {
+                const userCredential = await auth.signInWithEmailAndPassword(email, password);
+                showMessage('Login successful!', 'success');
+                console.log('User logged in:', userCredential.user.uid);
+            } catch (error) {
+                showMessage('Login failed: ' + error.message, 'error');
+                console.error('Login error:', error);
+            }
+        }
+
+        async function register() {
+            const username = document.getElementById('registerUsername').value;
+            const email = document.getElementById('registerEmail').value;
+            const password = document.getElementById('registerPassword').value;
+            const selectedAvatar = document.querySelector('.avatar-option.selected').getAttribute('data-avatar');
+
+            if (!username || !email || !password) {
+                showMessage('Please fill all fields', 'error');
+                return;
+            }
+
+            if (password.length < 6) {
+                showMessage('Password must be at least 6 characters', 'error');
+                return;
+            }
+
+            showLoading('Creating account...');
+
+            try {
+                // Create auth user
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+
+                // Save user profile to Firestore
+                await db.collection('users').doc(user.uid).set({
+                    username: username,
+                    email: email,
+                    avatar: selectedAvatar,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    lastSeen: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                showMessage('Account created successfully!', 'success');
+                showTab('room');
+                console.log('User registered:', user.uid);
+            } catch (error) {
+                showMessage('Registration failed: ' + error.message, 'error');
+                console.error('Registration error:', error);
+            }
+        }
+
+        async function loginWithGoogle() {
+            showLoading('Connecting to Google...');
+
+            try {
+                const provider = new firebase.auth.GoogleAuthProvider();
+
+                // Add scopes for user info
+                provider.addScope('profile');
+                provider.addScope('email');
+
+                const result = await auth.signInWithPopup(provider);
+                const user = result.user;
+
+                // Check if user exists in Firestore
+                const userDoc = await db.collection('users').doc(user.uid).get();
+
+                if (!userDoc.exists) {
+                    // Create user profile
+                    await db.collection('users').doc(user.uid).set({
+                        username: user.displayName || user.email.split('@')[0],
+                        email: user.email,
+                        avatar: '1',
+                        photoURL: user.photoURL || '',
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        lastSeen: firebase.firestore.FieldValue.serverTimestamp(),
+                        provider: 'google'
+                    });
+                } else {
+                    // Update last seen
+                    await db.collection('users').doc(user.uid).update({
+                        lastSeen: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                }
+
+                showMessage('Signed in with Google! Welcome ' + (user.displayName || user.email), 'success');
+                console.log('Google login successful:', user.uid);
+
+            } catch (error) {
+                console.error('Google login error details:', error);
+
+                // Better error messages
+                if (error.code === 'auth/unauthorized-domain') {
+                    showMessage(
+                        'Domain not authorized. Please add "likedsong12-arch.github.io" to Firebase Authorized Domains.',
+                        'error'
+                    );
+
+                    // Show help message with link
+                    showMessage(
+                        'Fix: Go to Firebase Console → Authentication → Settings → Add domain: "likedsong12-arch.github.io"',
+                        'error'
+                    );
+                } else if (error.code === 'auth/popup-blocked') {
+                    showMessage('Popup was blocked by browser. Please allow popups for this site.', 'error');
+                } else if (error.code === 'auth/popup-closed-by-user') {
+                    showMessage('Login cancelled', 'info');
+                } else {
+                    showMessage('Google login failed: ' + error.message, 'error');
+                }
+            }
+        }
+
+        async function enterRoom() {
+            const action = document.querySelector('.room-action-btn.active').getAttribute('data-action');
+            const roomId = roomIdInput.value.trim().toUpperCase();
+
+            if (!roomId) {
+                showMessage('Please enter a room ID', 'error');
+                return;
+            }
+
+            showLoading(action === 'create' ? 'Creating room...' : 'Joining room...');
+
+            try {
+                if (action === 'create') {
+                    // Create room
+                    await db.collection('rooms').doc(roomId).set({
+                        createdBy: currentUser.uid,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        name: `${currentUser.displayName || 'User'}'s Anime Room`,
+                        users: [currentUser.uid],
+                        currentVideo: null,
+                        isPlaying: false,
+                        messages: []
+                    });
+                    showMessage(`Room ${roomId} created! Share this ID with friends.`, 'success');
+                } else {
+                    // Join room
+                    const roomDoc = await db.collection('rooms').doc(roomId).get();
+
+                    if (!roomDoc.exists) {
+                        showMessage('Room not found', 'error');
+                        return;
+                    }
+
+                    await db.collection('rooms').doc(roomId).update({
+                        users: firebase.firestore.FieldValue.arrayUnion(currentUser.uid)
+                    });
+                    showMessage(`Joined room ${roomId}!`, 'success');
+                }
+
+                // Set current room and show room interface
+                currentRoomId = roomId;
+                displayRoomId.textContent = roomId;
+                videoRoomId.textContent = roomId;
+
+                // Hide auth container and show room interface
+                authContainer.style.display = 'none';
+                roomInterface.style.display = 'block';
+
+                // Start listening to room updates
+                setupRoomListeners(roomId);
+
+            } catch (error) {
+                showMessage('Room error: ' + error.message, 'error');
+                console.error('Room error:', error);
+            }
+        }
+
+        async function syncVideo() {
+            const videoUrl = videoUrlInput.value.trim();
+            if (!videoUrl || !currentRoomId) return;
+
+            try {
+                await db.collection('rooms').doc(currentRoomId).update({
+                    currentVideo: videoUrl,
+                    isPlaying: false
+                });
+                showMessage('Video URL synced!', 'success');
+            } catch (error) {
+                showMessage('Error syncing video: ' + error.message, 'error');
+            }
+        }
+
+        function setupRoomListeners(roomId) {
+            // Stop previous listener if exists
+            if (roomUnsubscribe) {
+                roomUnsubscribe();
+            }
+
+            // Listen for room updates
+            roomUnsubscribe = db.collection('rooms').doc(roomId).onSnapshot((doc) => {
+                if (doc.exists) {
+                    const room = doc.data();
+                    updateRoomUsers(room.users || []);
+                    updateChat(room.messages || []);
+
+                    // Update video if exists
+                    if (room.currentVideo) {
+                        videoUrlInput.value = room.currentVideo;
+                    }
+                }
+            }, (error) => {
+                console.error('Room listener error:', error);
+            });
+        }
+
+        async function updateRoomUsers(userIds) {
+            roomUsers.innerHTML = '';
+
+            for (const userId of userIds) {
+                try {
+                    const userDoc = await db.collection('users').doc(userId).get();
+                    if (userDoc.exists) {
+                        const user = userDoc.data();
+                        const userElement = document.createElement('div');
+                        userElement.className = 'user-item';
+                        userElement.innerHTML = `<i class="fas fa-user"></i> ${user.username || 'User'}`;
+                        roomUsers.appendChild(userElement);
+                    }
+                } catch (error) {
+                    console.error('Error loading user:', error);
+                }
+            }
+        }
+
+        function updateChat(messages) {
+            chatMessages.innerHTML = '';
+
+            if (!messages || messages.length === 0) {
+                chatMessages.innerHTML = '<div style="text-align: center; color: var(--gray); padding: 20px;">No messages yet. Start the conversation!</div>';
+                return;
+            }
+
+            messages.forEach(msg => {
+                const msgElement = document.createElement('div');
+                msgElement.style.marginBottom = '10px';
+                msgElement.style.padding = '8px';
+                msgElement.style.background = 'rgba(30, 41, 59, 0.5)';
+                msgElement.style.borderRadius = '5px';
+                msgElement.innerHTML = `
+                    <strong style="color: var(--primary-light);">${msg.username || 'User'}:</strong>
+                    <span>${msg.text}</span>
+                    <div style="font-size: 0.8em; color: var(--gray);">${formatTime(msg.timestamp)}</div>
+                `;
+                chatMessages.appendChild(msgElement);
+            });
+
+            // Scroll to bottom
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function formatTime(timestamp) {
+            if (!timestamp) return '';
+            const date = timestamp.toDate();
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        async function sendMessage() {
+            const text = chatInput.value.trim();
+            if (!text || !currentRoomId || !currentUser) return;
+
+            try {
+                const roomRef = db.collection('rooms').doc(currentRoomId);
+                const roomDoc = await roomRef.get();
+                const messages = roomDoc.data().messages || [];
+
+                // Get user profile for username
+                const userDoc = await db.collection('users').doc(currentUser.uid).get();
+                const userData = userDoc.exists ? userDoc.data() : { username: 'User' };
+
+                messages.push({
+                    userId: currentUser.uid,
+                    username: userData.username || currentUser.displayName || 'Anonymous',
+                    text: text,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                await roomRef.update({ messages: messages });
+                chatInput.value = '';
+            } catch (error) {
+                console.error('Error sending message:', error);
+                showMessage('Failed to send message', 'error');
+            }
+        }
+
+        async function leaveRoom() {
+            if (!currentRoomId) return;
+
+            try {
+                // Remove user from room
+                await db.collection('rooms').doc(currentRoomId).update({
+                    users: firebase.firestore.FieldValue.arrayRemove(currentUser.uid)
+                });
+
+                // Stop room listener
+                if (roomUnsubscribe) {
+                    roomUnsubscribe();
+                    roomUnsubscribe = null;
+                }
+
+                // Hide room interface and show auth container
+                roomInterface.style.display = 'none';
+                authContainer.style.display = 'block';
+                currentRoomId = null;
+
+                // Clear chat
+                chatMessages.innerHTML = '';
+                roomUsers.innerHTML = '';
+                videoUrlInput.value = '';
+
+                showMessage('Left the room', 'success');
+            } catch (error) {
+                showMessage('Error leaving room: ' + error.message, 'error');
+            }
+        }
+
+        async function logout() {
+            try {
+                // Leave room if in one
+                if (currentRoomId) {
+                    await leaveRoom();
+                }
+
+                await auth.signOut();
+                showMessage('Logged out successfully', 'success');
+                showTab('login');
+                currentUser = null;
+            } catch (error) {
+                showMessage('Logout failed: ' + error.message, 'error');
+            }
+        }
+
+        async function updateUserProfile(user) {
+            try {
+                const userDoc = await db.collection('users').doc(user.uid).get();
+                if (userDoc.exists) {
+                    const userData = userDoc.data();
+                    console.log('User profile:', userData);
+                }
+            } catch (error) {
+                console.error('Error loading user profile:', error);
+            }
+        }
+
+        // ==================== UI HELPER FUNCTIONS ====================
+        function showMessage(message, type = 'info') {
+            messageContainer.innerHTML = `
+                <div class="${type}-message">
+                    ${message}
+                </div>
+            `;
+
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                messageContainer.innerHTML = '';
+            }, 5000);
+        }
+
+        function showLoading(message) {
+            messageContainer.innerHTML = `
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <div>${message}</div>
+                </div>
+            `;
+        }
+
+        // Initialize room input
+        updateRoomInput('create');
+    </script>
+</body>
+
+</html>
