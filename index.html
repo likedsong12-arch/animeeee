@@ -83,7 +83,7 @@
         .video-container {
             position: relative;
             width: 100%;
-            padding-bottom: 56.25%; /* 16:9 aspect ratio */
+            padding-bottom: 56.25%;
             height: 0;
             margin-bottom: 1rem;
         }
@@ -95,17 +95,6 @@
             width: 100%;
             height: 100%;
             border-radius: 10px;
-        }
-
-        .video-placeholder {
-            background: #000;
-            border-radius: 10px;
-            aspect-ratio: 16/9;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--gray);
-            margin-bottom: 1rem;
         }
 
         .video-controls {
@@ -151,6 +140,9 @@
             margin-bottom: 5px;
             background: rgba(124, 58, 237, 0.1);
             border-radius: 5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .logo {
@@ -350,13 +342,8 @@
         }
 
         @keyframes spin {
-            0% {
-                transform: rotate(0deg);
-            }
-
-            100% {
-                transform: rotate(360deg);
-            }
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         .error-message {
@@ -535,6 +522,13 @@
             margin-bottom: 5px;
             font-size: 0.9rem;
         }
+
+        /* Sync status */
+        .sync-status {
+            font-size: 0.8rem;
+            color: var(--gray);
+            margin-top: 0.5rem;
+        }
     </style>
 </head>
 
@@ -627,9 +621,12 @@
         <div class="room-interface" id="roomInterface">
             <div class="room-header">
                 <h2 class="room-title">🎬 Room: <span id="displayRoomId">ANIME123</span></h2>
-                <button id="leaveRoomBtn" class="btn btn-secondary" style="width: auto;">
-                    <i class="fas fa-door-closed"></i> Leave Room
-                </button>
+                <div style="display: flex; gap: 10px;">
+                    <span class="sync-status" id="syncStatus">Synced</span>
+                    <button id="leaveRoomBtn" class="btn btn-secondary" style="width: auto;">
+                        <i class="fas fa-door-closed"></i> Leave Room
+                    </button>
+                </div>
             </div>
 
             <div class="room-content">
@@ -685,7 +682,7 @@
                     <!-- Users in Room -->
                     <div class="room-users">
                         <h4 style="color: var(--primary-light); margin-bottom: 0.5rem;">
-                            <i class="fas fa-users"></i> Users in Room
+                            <i class="fas fa-users"></i> Users in Room (<span id="userCount">0</span>)
                         </h4>
                         <div id="roomUsers">
                             <!-- Users will appear here -->
@@ -752,8 +749,9 @@
         let chatUnsubscribe = null;
         let youtubePlayer = null;
         let isSyncing = false;
-        let lastSyncTime = 0;
-        let lastUserActionTime = 0;
+        let lastActionTime = 0;
+        let lastSyncedTime = 0;
+        let syncInterval = null;
         const YOUTUBE_API_KEY = "AIzaSyBp6KnxeONqynFO6GAzsNwzIl09bDOViq8";
 
         // ==================== DOM ELEMENTS ====================
@@ -771,6 +769,7 @@
         const chatInput = document.getElementById('chatInput');
         const sendMessageBtn = document.getElementById('sendMessageBtn');
         const roomUsers = document.getElementById('roomUsers');
+        const userCount = document.getElementById('userCount');
         const searchModal = document.getElementById('searchModal');
         const closeSearchModal = document.getElementById('closeSearchModal');
         const searchVideoBtn = document.getElementById('searchVideoBtn');
@@ -784,15 +783,25 @@
         const pauseBtn = document.getElementById('pauseBtn');
         const directVideoInput = document.getElementById('directVideoInput');
         const loadDirectBtn = document.getElementById('loadDirectBtn');
+        const syncStatus = document.getElementById('syncStatus');
 
         // ==================== YOUTUBE PLAYER ====================
+        let playerReady = false;
+
         function onYouTubeIframeAPIReady() {
             console.log('YouTube API ready');
-            // Create a default player, will be updated when video is selected
+            // Player will be created when we need it
+        }
+
+        function createYouTubePlayer(videoId) {
+            if (youtubePlayer) {
+                youtubePlayer.destroy();
+            }
+            
             youtubePlayer = new YT.Player('youtube-player', {
                 height: '100%',
                 width: '100%',
-                videoId: '',
+                videoId: videoId || '',
                 playerVars: {
                     'autoplay': 0,
                     'controls': 1,
@@ -811,6 +820,7 @@
 
         function onPlayerReady(event) {
             console.log('YouTube player ready');
+            playerReady = true;
         }
 
         function onPlayerStateChange(event) {
@@ -821,67 +831,45 @@
             const currentTime = youtubePlayer.getCurrentTime();
             const videoId = youtubePlayer.getVideoData().video_id;
             
-            // Only sync if this was a user action (not from Firestore sync)
+            // Prevent rapid syncs (minimum 500ms between syncs)
             const now = Date.now();
-            if (now - lastUserActionTime < 1000) return; // Prevent rapid sync
+            if (now - lastActionTime < 500) return;
             
             // Update Firestore with current state
-            syncPlayerState(state, currentTime, videoId);
+            updatePlayerState(state, currentTime, videoId);
+            lastActionTime = now;
         }
 
         function onPlayerError(event) {
             console.error('YouTube player error:', event.data);
+            showMessage('YouTube player error. Please try a different video.', 'error');
         }
 
-        async function syncPlayerState(state, currentTime, videoId) {
+        async function updatePlayerState(state, currentTime, videoId) {
             if (!currentRoomId || !currentUser) return;
             
             try {
-                const isPlaying = (state === YT.PlayerState.PLAYING || state === YT.PlayerState.BUFFERING);
+                const isPlaying = (state === YT.PlayerState.PLAYING);
+                const lastUpdate = Date.now();
                 
                 await db.collection('rooms').doc(currentRoomId).update({
                     isPlaying: isPlaying,
                     currentTime: currentTime,
-                    lastSyncTime: firebase.firestore.FieldValue.serverTimestamp(),
-                    lastSyncBy: currentUser.uid
+                    lastUpdate: lastUpdate,
+                    lastUpdateBy: currentUser.uid
                 });
                 
-                console.log('Synced player state:', { isPlaying, currentTime, videoId });
-            } catch (error) {
-                console.error('Error syncing player state:', error);
-            }
-        }
-
-        function updateYouTubePlayer(videoId, shouldPlay, seekTo) {
-            if (!youtubePlayer || !youtubePlayer.loadVideoById) return;
-            
-            isSyncing = true;
-            
-            // Load the video
-            youtubePlayer.loadVideoById({
-                videoId: videoId,
-                startSeconds: seekTo || 0
-            });
-            
-            // Set play state after a short delay
-            setTimeout(() => {
-                if (shouldPlay) {
-                    youtubePlayer.playVideo();
-                } else {
-                    youtubePlayer.pauseVideo();
-                }
+                console.log('Updated player state:', { isPlaying, currentTime, videoId });
+                updateSyncStatus('Syncing...');
                 
-                // Reset sync flag after a moment
-                setTimeout(() => {
-                    isSyncing = false;
-                }, 1000);
-            }, 500);
+            } catch (error) {
+                console.error('Error updating player state:', error);
+            }
         }
 
         function extractYouTubeId(url) {
             if (!url) return null;
             
-            // Handle various YouTube URL formats
             const patterns = [
                 /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&?#]+)/,
                 /(?:youtube\.com\/watch\?.*v=([^&?#]+))/,
@@ -905,19 +893,47 @@
             setupEventListeners();
             
             // Check auth state
-            auth.onAuthStateChanged((user) => {
+            auth.onAuthStateChanged(async (user) => {
                 if (user) {
                     // User is logged in
                     currentUser = user;
+                    
+                    // Check if user document exists, create if not
+                    await checkUserProfile(user);
+                    
                     showMessage('Welcome back!', 'success');
                     showTab('room');
-                    updateUserProfile(user);
                 } else {
                     // No user logged in
                     showTab('login');
                     currentUser = null;
                 }
             });
+        }
+
+        async function checkUserProfile(user) {
+            try {
+                const userDoc = await db.collection('users').doc(user.uid).get();
+                if (!userDoc.exists) {
+                    // Create user profile with default data
+                    await db.collection('users').doc(user.uid).set({
+                        username: user.displayName || user.email.split('@')[0],
+                        email: user.email,
+                        avatar: '1',
+                        photoURL: user.photoURL || '',
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        lastSeen: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    console.log('User profile created:', user.uid);
+                } else {
+                    // Update last seen
+                    await db.collection('users').doc(user.uid).update({
+                        lastSeen: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                }
+            } catch (error) {
+                console.error('Error checking user profile:', error);
+            }
         }
 
         function setupEventListeners() {
@@ -969,12 +985,16 @@
             // Video controls
             searchVideoBtn.addEventListener('click', openSearchModal);
             playBtn.addEventListener('click', () => {
-                lastUserActionTime = Date.now();
-                if (youtubePlayer) youtubePlayer.playVideo();
+                if (youtubePlayer) {
+                    youtubePlayer.playVideo();
+                    lastActionTime = Date.now();
+                }
             });
             pauseBtn.addEventListener('click', () => {
-                lastUserActionTime = Date.now();
-                if (youtubePlayer) youtubePlayer.pauseVideo();
+                if (youtubePlayer) {
+                    youtubePlayer.pauseVideo();
+                    lastActionTime = Date.now();
+                }
             });
             loadDirectBtn.addEventListener('click', loadDirectVideo);
             
@@ -1054,7 +1074,6 @@
             try {
                 const userCredential = await auth.signInWithEmailAndPassword(email, password);
                 showMessage('Login successful!', 'success');
-                console.log('User logged in:', userCredential.user.uid);
             } catch (error) {
                 showMessage('Login failed: ' + error.message, 'error');
                 console.error('Login error:', error);
@@ -1095,7 +1114,6 @@
 
                 showMessage('Account created successfully!', 'success');
                 showTab('room');
-                console.log('User registered:', user.uid);
             } catch (error) {
                 showMessage('Registration failed: ' + error.message, 'error');
                 console.error('Registration error:', error);
@@ -1107,47 +1125,17 @@
             
             try {
                 const provider = new firebase.auth.GoogleAuthProvider();
-                
-                // Add scopes for user info
                 provider.addScope('profile');
                 provider.addScope('email');
                 
                 const result = await auth.signInWithPopup(provider);
-                const user = result.user;
-
-                // Check if user exists in Firestore
-                const userDoc = await db.collection('users').doc(user.uid).get();
-                
-                if (!userDoc.exists) {
-                    // Create user profile
-                    await db.collection('users').doc(user.uid).set({
-                        username: user.displayName || user.email.split('@')[0],
-                        email: user.email,
-                        avatar: '1',
-                        photoURL: user.photoURL || '',
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                        lastSeen: firebase.firestore.FieldValue.serverTimestamp(),
-                        provider: 'google'
-                    });
-                } else {
-                    // Update last seen
-                    await db.collection('users').doc(user.uid).update({
-                        lastSeen: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                }
-
-                showMessage('Signed in with Google! Welcome ' + (user.displayName || user.email), 'success');
-                console.log('Google login successful:', user.uid);
+                showMessage('Signed in with Google!', 'success');
                 
             } catch (error) {
-                console.error('Google login error details:', error);
+                console.error('Google login error:', error);
                 
-                // Better error messages
                 if (error.code === 'auth/unauthorized-domain') {
-                    showMessage(
-                        'Domain not authorized. Please add "likedsong12-arch.github.io" to Firebase Authorized Domains.',
-                        'error'
-                    );
+                    showMessage('Domain not authorized. Please contact site administrator.', 'error');
                 } else if (error.code === 'auth/popup-blocked') {
                     showMessage('Popup was blocked by browser. Please allow popups for this site.', 'error');
                 } else if (error.code === 'auth/popup-closed-by-user') {
@@ -1182,8 +1170,8 @@
                         currentVideoUrl: null,
                         isPlaying: false,
                         currentTime: 0,
-                        lastSyncTime: firebase.firestore.FieldValue.serverTimestamp(),
-                        lastSyncBy: currentUser.uid
+                        lastUpdate: Date.now(),
+                        lastUpdateBy: currentUser.uid
                     });
                     showMessage(`Room ${roomId} created! Share this ID with friends.`, 'success');
                 } else {
@@ -1227,11 +1215,30 @@
                 chatUnsubscribe();
             }
             
+            // Clear any existing sync interval
+            if (syncInterval) {
+                clearInterval(syncInterval);
+            }
+            
+            // Start sync interval (sync every 2 seconds when playing)
+            syncInterval = setInterval(() => {
+                if (youtubePlayer && youtubePlayer.getPlayerState() === 1) { // Playing
+                    const currentTime = youtubePlayer.getCurrentTime();
+                    const now = Date.now();
+                    
+                    // Only sync if enough time has passed
+                    if (now - lastSyncedTime > 2000) {
+                        updatePlayerState(1, currentTime, youtubePlayer.getVideoData().video_id);
+                        lastSyncedTime = now;
+                    }
+                }
+            }, 2000);
+            
             // Listen for room updates (video state)
-            roomUnsubscribe = db.collection('rooms').doc(roomId).onSnapshot((doc) => {
+            roomUnsubscribe = db.collection('rooms').doc(roomId).onSnapshot(async (doc) => {
                 if (doc.exists) {
                     const room = doc.data();
-                    updateRoomUsers(room.users || []);
+                    await updateRoomUsers(room.users || []);
                     
                     // Update video if exists
                     if (room.currentVideoId && room.currentVideoId !== '') {
@@ -1239,37 +1246,10 @@
                         currentVideoTitle.textContent = room.currentVideoTitle || 'YouTube Video';
                         currentVideoUrl.textContent = room.currentVideoUrl || '';
                         
-                        // Get current player video ID
-                        const currentVideoId = youtubePlayer.getVideoData().video_id;
-                        
-                        // Only sync if the change wasn't made by current user recently
-                        const now = Date.now();
-                        if (room.lastSyncBy !== currentUser?.uid || now - lastSyncTime > 1000) {
-                            // Update YouTube player if needed
-                            if (currentVideoId !== room.currentVideoId) {
-                                // Different video, load it
-                                updateYouTubePlayer(room.currentVideoId, room.isPlaying, room.currentTime);
-                            } else if (youtubePlayer && youtubePlayer.getPlayerState) {
-                                // Same video, sync play state and time
-                                const playerState = youtubePlayer.getPlayerState();
-                                const shouldBePlaying = room.isPlaying;
-                                
-                                // Sync play state
-                                if (shouldBePlaying && (playerState === YT.PlayerState.PAUSED || playerState === YT.PlayerState.ENDED || playerState === YT.PlayerState.CUED)) {
-                                    youtubePlayer.playVideo();
-                                } else if (!shouldBePlaying && playerState === YT.PlayerState.PLAYING) {
-                                    youtubePlayer.pauseVideo();
-                                }
-                                
-                                // Sync time (only if difference is significant)
-                                const currentTime = youtubePlayer.getCurrentTime();
-                                if (room.currentTime && Math.abs(currentTime - room.currentTime) > 1) {
-                                    youtubePlayer.seekTo(room.currentTime, true);
-                                }
-                            }
+                        // If this update is from another user, sync our player
+                        if (room.lastUpdateBy !== currentUser?.uid) {
+                            await syncPlayerToRoom(room);
                         }
-                        
-                        lastSyncTime = now;
                     } else {
                         videoInfo.style.display = 'none';
                     }
@@ -1289,17 +1269,70 @@
                 });
         }
 
+        async function syncPlayerToRoom(room) {
+            if (!youtubePlayer || isSyncing) return;
+            
+            isSyncing = true;
+            updateSyncStatus('Syncing...');
+            
+            try {
+                const currentVideoId = youtubePlayer.getVideoData().video_id;
+                
+                // Check if video is different
+                if (currentVideoId !== room.currentVideoId) {
+                    // Load new video
+                    if (!playerReady) {
+                        createYouTubePlayer(room.currentVideoId);
+                    } else {
+                        youtubePlayer.loadVideoById(room.currentVideoId, room.currentTime || 0);
+                    }
+                } else {
+                    // Same video, sync time if difference is significant
+                    const currentTime = youtubePlayer.getCurrentTime();
+                    if (room.currentTime && Math.abs(currentTime - room.currentTime) > 1) {
+                        youtubePlayer.seekTo(room.currentTime, true);
+                    }
+                }
+                
+                // Sync play state
+                const playerState = youtubePlayer.getPlayerState();
+                if (room.isPlaying && (playerState !== 1 && playerState !== 3)) { // Not playing or buffering
+                    setTimeout(() => youtubePlayer.playVideo(), 500);
+                } else if (!room.isPlaying && playerState === 1) { // Playing but should be paused
+                    youtubePlayer.pauseVideo();
+                }
+                
+                updateSyncStatus('Synced');
+                
+            } catch (error) {
+                console.error('Error syncing player:', error);
+                updateSyncStatus('Sync error');
+            } finally {
+                setTimeout(() => {
+                    isSyncing = false;
+                }, 1000);
+            }
+        }
+
         async function updateRoomUsers(userIds) {
             roomUsers.innerHTML = '';
+            userCount.textContent = userIds.length;
             
-            for (const userId of userIds) {
+            // Deduplicate user IDs
+            const uniqueUserIds = [...new Set(userIds)];
+            
+            for (const userId of uniqueUserIds) {
                 try {
                     const userDoc = await db.collection('users').doc(userId).get();
                     if (userDoc.exists) {
                         const user = userDoc.data();
                         const userElement = document.createElement('div');
                         userElement.className = 'user-item';
-                        userElement.innerHTML = `<i class="fas fa-user"></i> ${user.username || 'User'}`;
+                        userElement.innerHTML = `
+                            <i class="fas fa-user" style="color: var(--primary-light);"></i>
+                            <span>${user.username || 'User'}</span>
+                            ${userId === currentUser?.uid ? '<span style="color: var(--gray); font-size: 0.8rem;">(You)</span>' : ''}
+                        `;
                         roomUsers.appendChild(userElement);
                     }
                 } catch (error) {
@@ -1400,10 +1433,17 @@
                     chatUnsubscribe = null;
                 }
                 
+                // Clear sync interval
+                if (syncInterval) {
+                    clearInterval(syncInterval);
+                    syncInterval = null;
+                }
+                
                 // Destroy YouTube player
                 if (youtubePlayer) {
                     youtubePlayer.destroy();
                     youtubePlayer = null;
+                    playerReady = false;
                 }
                 
                 // Hide room interface and show auth container
@@ -1419,6 +1459,7 @@
                     </div>
                 `;
                 roomUsers.innerHTML = '';
+                userCount.textContent = '0';
                 videoInfo.style.display = 'none';
                 
                 showMessage('Left the room', 'success');
@@ -1443,15 +1484,14 @@
             }
         }
 
-        async function updateUserProfile(user) {
-            try {
-                const userDoc = await db.collection('users').doc(user.uid).get();
-                if (userDoc.exists) {
-                    const userData = userDoc.data();
-                    console.log('User profile:', userData);
-                }
-            } catch (error) {
-                console.error('Error loading user profile:', error);
+        function updateSyncStatus(status) {
+            syncStatus.textContent = status;
+            if (status === 'Synced') {
+                syncStatus.style.color = 'var(--success)';
+            } else if (status === 'Syncing...') {
+                syncStatus.style.color = 'var(--primary-light)';
+            } else {
+                syncStatus.style.color = 'var(--gray)';
             }
         }
 
@@ -1490,7 +1530,6 @@
             } catch (error) {
                 console.error('Error searching YouTube:', error);
                 showMessageInModal('Search failed. Please try again.', 'error');
-                // Fallback to mock data
                 displayMockResults(query);
             }
         }
@@ -1526,15 +1565,14 @@
         }
 
         function displayMockResults(query) {
-            // Mock data for fallback
             const mockVideos = [
                 {
-                    id: { videoId: 'sFMRqxCexDk' },
+                    id: { videoId: 'gJJY1bTlmgI' },
                     snippet: {
-                        title: `Example Anime Video - ${query}`,
-                        channelTitle: 'Anime Channel',
+                        title: `Anuv Jain - Husn (Official Video)`,
+                        channelTitle: 'Anuv Jain',
                         thumbnails: {
-                            medium: { url: 'https://via.placeholder.com/250x140/1e293b/ffffff?text=Anime+Video' }
+                            medium: { url: 'https://via.placeholder.com/250x140/1e293b/ffffff?text=Anuv+Jain' }
                         }
                     }
                 }
@@ -1550,6 +1588,11 @@
                 const videoTitle = video.snippet.title;
                 const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
                 
+                // Create YouTube player if it doesn't exist
+                if (!youtubePlayer) {
+                    createYouTubePlayer(videoId);
+                }
+                
                 // Update room with selected video
                 await db.collection('rooms').doc(currentRoomId).update({
                     currentVideoId: videoId,
@@ -1557,8 +1600,8 @@
                     currentVideoUrl: videoUrl,
                     isPlaying: false,
                     currentTime: 0,
-                    lastSyncTime: firebase.firestore.FieldValue.serverTimestamp(),
-                    lastSyncBy: currentUser.uid
+                    lastUpdate: Date.now(),
+                    lastUpdateBy: currentUser.uid
                 });
 
                 // Send a chat message about the video change
@@ -1584,39 +1627,27 @@
             }
 
             try {
-                // Get video info from YouTube API
-                let videoTitle = 'YouTube Video';
-                try {
-                    const response = await fetch(
-                        `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YOUTUBE_API_KEY}`
-                    );
-                    
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (data.items && data.items[0]) {
-                            videoTitle = data.items[0].snippet.title;
-                        }
-                    }
-                } catch (apiError) {
-                    console.log('Using default video title');
+                // Create YouTube player if it doesn't exist
+                if (!youtubePlayer) {
+                    createYouTubePlayer(videoId);
                 }
-
+                
                 // Update room with video
                 await db.collection('rooms').doc(currentRoomId).update({
                     currentVideoId: videoId,
-                    currentVideoTitle: videoTitle,
+                    currentVideoTitle: 'YouTube Video',
                     currentVideoUrl: url,
                     isPlaying: false,
                     currentTime: 0,
-                    lastSyncTime: firebase.firestore.FieldValue.serverTimestamp(),
-                    lastSyncBy: currentUser.uid
+                    lastUpdate: Date.now(),
+                    lastUpdateBy: currentUser.uid
                 });
 
                 // Send system message
-                await sendSystemMessage(`${currentUser.displayName || 'User'} loaded a video: ${videoTitle}`);
+                await sendSystemMessage(`${currentUser.displayName || 'User'} loaded a video from URL`);
 
                 directVideoInput.value = '';
-                showMessage(`Video loaded: ${videoTitle}`, 'success');
+                showMessage(`Video loaded`, 'success');
 
             } catch (error) {
                 console.error('Error loading video:', error);
@@ -1647,7 +1678,6 @@
                 </div>
             `;
             
-            // Auto-remove after 5 seconds
             setTimeout(() => {
                 messageContainer.innerHTML = '';
             }, 5000);
