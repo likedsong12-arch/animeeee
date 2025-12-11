@@ -792,6 +792,10 @@
         let lastActionTime = 0;
         let lastSyncedTime = 0;
         let syncInterval = null;
+        let globalState = 'PLAYING'; // 'PLAYING' or 'WAITING'
+        let myReadyState = false;
+        let syncThreshold = 1.5; // Seconds before hard seek
+        let softSyncThreshold = 0.3; // Seconds for speed adjustment
         const YOUTUBE_API_KEY = "AIzaSyBp6KnxeONqynFO6GAzsNwzIl09bDOViq8";
 
         // ==================== DOM ELEMENTS ====================
@@ -922,29 +926,107 @@
             if (!currentRoomId || !currentUser) return;
 
             try {
+                // Determine if we should be playing based on state
+                // 1 = PLAYING, 2 = PAUSED, 3 = BUFFERING
                 const isPlaying = (state === YT.PlayerState.PLAYING);
                 const lastUpdate = Date.now();
 
                 const updateData = {
-                    isPlaying: isPlaying,
-                    currentTime: currentTime,
                     lastUpdate: lastUpdate,
-                    lastUpdateBy: currentUser.uid
+                    lastUpdateBy: currentUser.uid,
+                    // We only update the MASTER state if we are initiating an action
+                    // Logic to be refined: If we are just playing along, we don't spam the room
+                    // BUT: The current logic allows anyone to be master.
                 };
 
-                // Only update videoId if it's valid and different (or strictly if we want to force it)
+                // CRITICAL CHANGE: 
+                // We do NOT update 'isPlaying' directly if we are just buffering or seeking for ourselves.
+                // We only update if we EXPLICITLY hit Play/Pause.
+                // The onStateChange event fires for EVERYTHING. We need to filter.
+
+                // For now, we will trust the provided state but filter heavily in the listener
+                // However, to fix the "Strict Start", we need to intercept PLAY events.
+
+                // This function is now mainly for "Status Reporting" or "Command Issuing"
+                // We'll separate them? No, let's keep it simple for now but add readiness.
+
+                // If this is a buffer event, just report ready status
+                if (state === YT.PlayerState.BUFFERING) {
+                    await db.collection('rooms').doc(currentRoomId).set({
+                        usersReady: {
+                            [currentUser.uid]: false // buffering means not ready
+                        }
+                    }, { merge: true });
+                    return;
+                }
+
+                // If we are strictly PAUSED or PLAYING or ENDED, update the main state
+                if (state === YT.PlayerState.PLAYING || state === YT.PlayerState.PAUSED || state === YT.PlayerState.ENDED) {
+                    updateData.isPlaying = (state === YT.PlayerState.PLAYING);
+                    updateData.currentTime = currentTime;
+
+                    // If Playing, we say we are ready
+                    if (isPlaying) {
+                        await db.collection('rooms').doc(currentRoomId).set({
+                            usersReady: {
+                                [currentUser.uid]: true
+                            }
+                        }, { merge: true });
+                    }
+                }
+
+                // Video ID change
                 if (videoId) {
                     updateData.currentVideoId = videoId;
                 }
 
-                await db.collection('rooms').doc(currentRoomId).update(updateData);
+                // If we are initiating a PLAY, we might want to start a "WAITING" phase if not everyone is ready
+                // But for simplicity in this artifact, we will use the "Soft Sync" heavily.
 
-                // console.log('Updated player state:', { isPlaying, currentTime, videoId });
+                // Only write to DB if it's a significant change or we haven't in a while
+                await db.collection('rooms').doc(currentRoomId).update(updateData);
                 updateSyncStatus('Syncing...');
 
             } catch (error) {
                 console.error('Error updating player state:', error);
             }
+        }
+
+        // New function to explicit request Play/Pause/Seek
+        async function sendCommand(type, payload) {
+            if (!currentRoomId || !currentUser) return;
+
+            const data = {
+                lastUpdateBy: currentUser.uid,
+                lastUpdate: Date.now()
+            };
+
+            if (type === 'PLAY') {
+                // START THE STRICT SYNC PROTOCOL
+                // 1. Set room to WAITING state
+                // 2. Set target time
+                // 3. Wait for all to be ready (handled by listener)
+                data.globalState = 'WAITING';
+                data.isPlaying = true; // Intent is to play
+                data.currentTime = payload.currentTime || youtubePlayer.getCurrentTime();
+
+                // Reset everyone's ready state? 
+                // It's cleaner to just update our own and let others update theirs. 
+                // But we can't easily reset a Map field partially without a transaction or reading first.
+                // We will rely on clients updating their own 'usersReady'.
+
+            } else if (type === 'PAUSE') {
+                data.globalState = 'PLAYING'; // Normal state
+                data.isPlaying = false;
+                data.currentTime = payload.currentTime || youtubePlayer.getCurrentTime();
+
+            } else if (type === 'SEEK') {
+                data.globalState = 'WAITING'; // Seek also triggers waiting
+                data.isPlaying = payload.isPlaying; // Keep existing play state
+                data.currentTime = payload.currentTime;
+            }
+
+            await db.collection('rooms').doc(currentRoomId).set(data, { merge: true });
         }
 
         function extractYouTubeId(url) {
@@ -1074,15 +1156,15 @@
             // Video controls
             searchVideoBtn.addEventListener('click', openSearchModal);
             playBtn.addEventListener('click', () => {
-                if (youtubePlayer && typeof youtubePlayer.playVideo === 'function') {
-                    youtubePlayer.playVideo();
-                    lastActionTime = Date.now();
+                if (youtubePlayer) {
+                    sendCommand('PLAY', {});
+                    // Don't play locally immediately, let the Listener handle the "WAITING" phase
                 }
             });
             pauseBtn.addEventListener('click', () => {
-                if (youtubePlayer && typeof youtubePlayer.pauseVideo === 'function') {
-                    youtubePlayer.pauseVideo();
-                    lastActionTime = Date.now();
+                if (youtubePlayer) {
+                    sendCommand('PAUSE', {});
+                    youtubePlayer.pauseVideo(); // Immediate local feedback feels better
                 }
             });
             loadDirectBtn.addEventListener('click', loadDirectVideo);
@@ -1403,69 +1485,163 @@
         }
 
         async function syncPlayerToRoom(room) {
-            // If local player isn't even created yet, or sync is locked
-            if (isSyncing) return;
+            // SYNC LOGIC
+            // 1. Video Check
+            // 2. State machine (WAITING vs PLAYING)
+            // 3. Drift correction
 
-            // If the player doesn't exist yet but we have a video ID from the room
-            if (!youtubePlayer && room.currentVideoId) {
-                createYouTubePlayer(room.currentVideoId);
-                // The onReady will handle the rest implicitly if we wanted, 
-                // but let's allow this function to run when player is ready.
-                // For now, return and let the next snapshot or a retry handle it 
-                // typically the player creation is async so we can't sync immediately.
-                return;
+            if (!youtubePlayer || !playerReady) return;
+            if (isSyncing) return; // Local lock
+
+            // Is this update from me? Ignore unless it's a forced global state change
+            // (Wait, if I am the one who set WAITING, I still need to wait)
+            // if (room.lastUpdateBy === currentUser.uid) return; 
+
+            // 1. VIDEO ID CHECK
+            let currentVideoId = '';
+            try {
+                currentVideoId = youtubePlayer.getVideoData().video_id;
+            } catch (e) { }
+
+            if (room.currentVideoId && currentVideoId !== room.currentVideoId) {
+                console.log(`Sync: Changing video to ${room.currentVideoId}`);
+                console.log('Syncing: video change');
+                youtubePlayer.loadVideoById(room.currentVideoId, room.currentTime || 0);
+                return; // loadVideoById triggers events that will bring us back here
             }
 
-            if (!playerReady) return;
+            // 2. GLOBAL STATE HANDLING
+            if (room.globalState === 'WAITING') {
+                // PAUSE AND SEEK TO TARGET
+                updateSyncStatus('Syncing: Buffering...');
 
-            isSyncing = true;
-
-            try {
-                let currentVideoId = '';
-                try {
-                    currentVideoId = youtubePlayer.getVideoData().video_id;
-                } catch (e) { }
-
-                // Check if video is different
-                if (room.currentVideoId && currentVideoId !== room.currentVideoId) {
-                    console.log(`Sync: Charging video from ${currentVideoId} to ${room.currentVideoId}`);
-                    // Load new video
-                    youtubePlayer.loadVideoById(room.currentVideoId, room.currentTime || 0);
-                    // loadVideoById automatically plays, so if room is paused we might need to pause it
-                    // but we'll check state below
-                }
-                else {
-                    // Same video, sync time if difference is significant (optimized for perceived 0 latency)
-                    const currentTime = youtubePlayer.getCurrentTime();
-                    // Tolerance reduced to 0.5s
-                    if (room.currentTime && Math.abs(currentTime - room.currentTime) > 0.5) {
-                        // Only seek if we are far off, to avoid stuttering
-                        youtubePlayer.seekTo(room.currentTime, true);
-                    }
-                }
-
-                // Sync play state
                 const playerState = youtubePlayer.getPlayerState();
+                const myTime = youtubePlayer.getCurrentTime();
+                const targetTime = room.currentTime || 0;
 
-                // If room says playing (true) and we are not playing or buffering
-                if (room.isPlaying && (playerState !== 1 && playerState !== 3)) {
-                    youtubePlayer.playVideo();
-                }
-                // If room says paused (false) and we are playing
-                else if (!room.isPlaying && playerState === 1) {
+                // If we are not paused, pause
+                if (playerState === 1) {
                     youtubePlayer.pauseVideo();
                 }
 
-                updateSyncStatus('Synced');
+                // Seek if needed (be precise)
+                if (Math.abs(myTime - targetTime) > 0.1) {
+                    youtubePlayer.seekTo(targetTime, true);
+                }
 
-            } catch (error) {
-                console.error('Error syncing player:', error);
-                updateSyncStatus('Sync error');
-            } finally {
-                // Reduced debounce for faster responsiveness
-                setTimeout(() => {
-                    isSyncing = false;
-                }, 300);
+                // AM I READY?
+                // If buffered (playerState 2=paused or 3=buffering, basically not playing but loaded)
+                // We play a trick: we want to be "Buffered".
+                // YouTube API doesn't strictly say "I am buffered enough".
+                // But if we are paused at the right time, we are likely ready.
+
+                const isReady = (Math.abs(myTime - targetTime) < 0.5); // Close enough
+
+                if (isReady && !myReadyState) {
+                    myReadyState = true;
+                    // Report Ready
+                    db.collection('rooms').doc(currentRoomId).set({
+                        usersReady: {
+                            [currentUser.uid]: true
+                        }
+                    }, { merge: true });
+                } else if (!isReady) {
+                    myReadyState = false;
+                }
+
+                // CHECK IF EVERYONE IS READY
+                // We (the client) check if everyone is ready. If so, and we are the owner or just anyone,
+                // we *could* trigger the Play. 
+                // Better: The person who initiated the command (lastUpdateBy) checks constraints?
+                // OR: We just check local logic: If room says 'WAITING' and everyone is ready, we treat it as 'PLAYING'
+
+                const allUsers = room.users || [];
+                const readyMap = room.usersReady || {};
+                const allReady = allUsers.every(uid => readyMap[uid] === true);
+
+                if (allReady) {
+                    // Everyone is ready! Unleash the beasts!
+                    // If I am the one who started this, I switch global state to PLAYING
+                    if (room.lastUpdateBy === currentUser.uid) {
+                        db.collection('rooms').doc(currentRoomId).update({
+                            globalState: 'PLAYING',
+                            lastUpdate: Date.now() // freshness
+                        });
+                    }
+                }
+                return; // Stay in waiting state until globalState changes
+            }
+
+            // 3. NORMAL SYNC (PLAYING)
+            if (room.globalState === 'PLAYING' || !room.globalState) { // Fallback for old rooms
+
+                const remoteTime = room.currentTime;
+                // Calculate estimated current time based on lag
+                // room.currentTime was correct at room.lastUpdate.
+                // It is now Date.now().
+                const timeSinceUpdate = (Date.now() - (room.lastUpdate || Date.now())) / 1000;
+
+                // If the room is playing, the video has advanced since the update
+                const targetTime = room.isPlaying
+                    ? (remoteTime + timeSinceUpdate)
+                    : remoteTime;
+
+                const myTime = youtubePlayer.getCurrentTime();
+                const diff = targetTime - myTime;
+                const absDiff = Math.abs(diff);
+
+                // DEBUG
+                // console.log(`Lag: ${diff.toFixed(2)}s | Target: ${targetTime.toFixed(2)} | Mine: ${myTime.toFixed(2)}`);
+
+                // STATUS SYNC
+                const playerState = youtubePlayer.getPlayerState();
+                if (room.isPlaying) {
+                    if (playerState !== 1 && playerState !== 3) {
+                        youtubePlayer.playVideo();
+                        updateSyncStatus('Syncing: Starting...');
+                    }
+                } else {
+                    if (playerState === 1) {
+                        youtubePlayer.pauseVideo();
+                        updateSyncStatus('Syncing: Pausing...');
+                    }
+                }
+
+                // DRIFT CORRECTION
+                if (Math.abs(diff) > syncThreshold) {
+                    // Hard Seek (Large drift)
+                    console.log(`Hard Seek: ${diff.toFixed(2)}s drift`);
+                    youtubePlayer.seekTo(targetTime, true);
+                    updateSyncStatus('Syncing: Seeking...');
+                    isSyncing = true;
+                    setTimeout(() => isSyncing = false, 1000); // Block updates for a sec
+
+                } else if (Math.abs(diff) > softSyncThreshold) {
+                    // Soft Sync (Playback Rate)
+                    // If we are behind (diff > 0), speed up.
+                    // If we are ahead (diff < 0), slow down.
+                    const newRate = diff > 0 ? 1.25 : 0.75;
+
+                    // Only apply if playing
+                    if (playerState === 1) {
+                        try {
+                            if (youtubePlayer.getPlaybackRate() !== newRate) {
+                                youtubePlayer.setPlaybackRate(newRate);
+                                updateSyncStatus('Syncing: Adjusting Speed...');
+                            }
+                        } catch (e) { }
+                    }
+                } else {
+                    // We are good, return to normal speed
+                    if (playerState === 1) {
+                        try {
+                            if (youtubePlayer.getPlaybackRate() !== 1) {
+                                youtubePlayer.setPlaybackRate(1);
+                                updateSyncStatus('Synced');
+                            }
+                        } catch (e) { }
+                    }
+                }
             }
         }
 
