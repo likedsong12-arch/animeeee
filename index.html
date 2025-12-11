@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -1482,14 +1484,8 @@
         }
 
         async function syncPlayerToRoom(room) {
-            // STRICT CLIENT RULE: Host NEVER listens
-            if (isHost()) {
-                console.log("[Sync] I am Host, ignoring remote update");
-                return;
-            }
-
-            // Console log the incoming update
-            console.log(`[Sync] Incoming Update - Playing: ${room.isPlaying}, Time: ${room.currentTime}`);
+            // STRICT CLIENT RULE: Host NEVER listens to Time/State, but MUST listen to Video ID changes
+            const amHost = isHost();
 
             // Local sync lock (Anti-Echo)
             if (isSyncing || !youtubePlayer || !playerReady) {
@@ -1499,17 +1495,26 @@
                 return;
             }
 
-            // 1. Video ID Check
+            // 1. Video ID Check (COLLABORATIVE: Everyone checks this)
             let currentVideoId = '';
             try {
                 currentVideoId = youtubePlayer.getVideoData().video_id;
             } catch (e) { }
 
             if (room.currentVideoId && currentVideoId !== room.currentVideoId) {
-                console.log(`Sync: Changing video to ${room.currentVideoId}`);
+                console.log(`[Sync] Changing video to ${room.currentVideoId}`);
                 isSyncing = true;
-                youtubePlayer.loadVideoById(room.currentVideoId, room.currentTime || 0);
+                youtubePlayer.loadVideoById(room.currentVideoId, 0); // Reset to 0 for new video
+
+                // If Host loaded it, they will start broadcasting the new state shortly
                 setTimeout(() => isSyncing = false, 1000);
+                return;
+            }
+
+            // --- STOP HERE IF HOST ---
+            // Host is the Source of Truth for Time/State. They do not listen to DB for this.
+            if (amHost) {
+                // console.log("[Sync] I am Host, ignoring remote time/state update");
                 return;
             }
 
@@ -1986,3 +1991,4 @@
 </body>
 
 </html>
+
