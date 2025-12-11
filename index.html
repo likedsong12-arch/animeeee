@@ -1167,6 +1167,99 @@
             }
         }
 
+        async function login() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            const rememberMe = document.getElementById('rememberMe').checked;
+
+            if (!email || !password) {
+                showMessage('Please enter email and password', 'error');
+                return;
+            }
+
+            showLoading('Logging in...');
+
+            try {
+                // Set persistence based heavily on user choice
+                const persistence = rememberMe
+                    ? firebase.auth.Auth.Persistence.LOCAL
+                    : firebase.auth.Auth.Persistence.SESSION;
+
+                await auth.setPersistence(persistence);
+                await auth.signInWithEmailAndPassword(email, password);
+                showMessage('Login successful!', 'success');
+            } catch (error) {
+                showMessage('Login failed: ' + error.message, 'error');
+                console.error('Login error:', error);
+            }
+        }
+
+        async function register() {
+            const username = document.getElementById('registerUsername').value;
+            const email = document.getElementById('registerEmail').value;
+            const password = document.getElementById('registerPassword').value;
+            const selectedAvatar = document.querySelector('.avatar-option.selected').getAttribute('data-avatar');
+
+            if (!username || !email || !password) {
+                showMessage('Please fill all fields', 'error');
+                return;
+            }
+
+            if (password.length < 6) {
+                showMessage('Password must be at least 6 characters', 'error');
+                return;
+            }
+
+            showLoading('Creating account...');
+
+            try {
+                // Create auth user
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+
+                // Save user profile to Firestore
+                await db.collection('users').doc(user.uid).set({
+                    username: username,
+                    email: email,
+                    avatar: selectedAvatar,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    lastSeen: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                showMessage('Account created successfully!', 'success');
+                showTab('room');
+            } catch (error) {
+                showMessage('Registration failed: ' + error.message, 'error');
+                console.error('Registration error:', error);
+            }
+        }
+
+        async function loginWithGoogle() {
+            showLoading('Connecting to Google...');
+
+            try {
+                const provider = new firebase.auth.GoogleAuthProvider();
+                provider.addScope('profile');
+                provider.addScope('email');
+
+                const result = await auth.signInWithPopup(provider);
+                showMessage('Signed in with Google!', 'success');
+
+            } catch (error) {
+                console.error('Google login error:', error);
+
+                if (error.code === 'auth/unauthorized-domain') {
+                    showMessage('Domain not authorized. Please contact site administrator.', 'error');
+                } else if (error.code === 'auth/popup-blocked') {
+                    showMessage('Popup was blocked by browser. Please allow popups for this site.', 'error');
+                } else if (error.code === 'auth/popup-closed-by-user') {
+                    showMessage('Login cancelled', 'info');
+                } else {
+                    showMessage('Google login failed: ' + error.message, 'error');
+                }
+            }
+        }
+
         async function setupRoomListeners(roomId) {
             // Stop previous listeners if exist
             if (roomUnsubscribe) {
