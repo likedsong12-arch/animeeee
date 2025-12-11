@@ -1268,6 +1268,66 @@
             }
         }
 
+        async function enterRoom() {
+            const action = document.querySelector('.room-action-btn.active').getAttribute('data-action');
+            const roomId = roomIdInput.value.trim().toUpperCase();
+
+            if (!roomId) {
+                showMessage('Please enter a room ID', 'error');
+                return;
+            }
+
+            showLoading(action === 'create' ? 'Creating room...' : 'Joining room...');
+
+            try {
+                if (action === 'create') {
+                    // Create room
+                    await db.collection('rooms').doc(roomId).set({
+                        createdBy: currentUser.uid,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        name: `${currentUser.displayName || 'User'}'s Anime Room`,
+                        users: [currentUser.uid],
+                        currentVideoId: null,
+                        currentVideoTitle: null,
+                        currentVideoUrl: null,
+                        isPlaying: false,
+                        currentTime: 0,
+                        lastUpdate: Date.now(),
+                        lastUpdateBy: currentUser.uid
+                    });
+                    showMessage(`Room ${roomId} created! Share this ID with friends.`, 'success');
+                } else {
+                    // Join room
+                    const roomDoc = await db.collection('rooms').doc(roomId).get();
+
+                    if (!roomDoc.exists) {
+                        showMessage('Room not found', 'error');
+                        return;
+                    }
+
+                    await db.collection('rooms').doc(roomId).update({
+                        users: firebase.firestore.FieldValue.arrayUnion(currentUser.uid)
+                    });
+                    showMessage(`Joined room ${roomId}!`, 'success');
+                }
+
+                // Set current room and show room interface
+                currentRoomId = roomId;
+                displayRoomId.textContent = roomId;
+
+                // Hide auth container and show room interface
+                authContainer.style.display = 'none';
+                roomInterface.style.display = 'block';
+
+                // Start listening to room updates
+                setupRoomListeners(roomId);
+
+            } catch (error) {
+                showMessage('Room error: ' + error.message, 'error');
+                console.error('Room error:', error);
+            }
+        }
+
         async function setupRoomListeners(roomId) {
             // Stop previous listeners if exist
             if (roomUnsubscribe) {
@@ -1824,4 +1884,3 @@
 </body>
 
 </html>
-
