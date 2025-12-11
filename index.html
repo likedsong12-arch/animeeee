@@ -828,8 +828,29 @@
         }
 
         function createYouTubePlayer(videoId) {
+            // Ensure container exists
+            let playerContainer = document.getElementById('youtube-player');
+            if (!playerContainer) {
+                const videoContainer = document.querySelector('.video-container');
+                playerContainer = document.createElement('div');
+                playerContainer.id = 'youtube-player';
+                videoContainer.appendChild(playerContainer);
+            }
+
             if (youtubePlayer) {
-                youtubePlayer.destroy();
+                try {
+                    youtubePlayer.destroy();
+                } catch (e) {
+                    console.warn('Player destroy warning:', e);
+                }
+            }
+
+            // Re-check container after destroy (sometimes destroy removes it)
+            if (!document.getElementById('youtube-player')) {
+                const videoContainer = document.querySelector('.video-container');
+                const newContainer = document.createElement('div');
+                newContainer.id = 'youtube-player';
+                videoContainer.appendChild(newContainer);
             }
 
             youtubePlayer = new YT.Player('youtube-player', {
@@ -837,7 +858,7 @@
                 width: '100%',
                 videoId: videoId || '',
                 playerVars: {
-                    'autoplay': 0,
+                    'autoplay': 1, // Auto play when loaded
                     'controls': 1,
                     'rel': 0,
                     'showinfo': 0,
@@ -855,19 +876,31 @@
         function onPlayerReady(event) {
             console.log('YouTube player ready');
             playerReady = true;
+
+            // If we have a pending seek or play state from room data, apply it now
+            if (currentRoomId && isSyncing) {
+                // The listener will handle the sync once playerReady is true
+            }
         }
 
         function onPlayerStateChange(event) {
-            // Don't sync if we're already syncing from Firestore
+            // Don't sync if we're already syncing from Firestore to avoid loops
             if (isSyncing) return;
 
             const state = event.data;
             const currentTime = youtubePlayer.getCurrentTime();
-            const videoId = youtubePlayer.getVideoData().video_id;
 
-            // Prevent rapid syncs (minimum 500ms between syncs)
+            // Safety check for videoData
+            let videoId = '';
+            try {
+                videoId = youtubePlayer.getVideoData().video_id;
+            } catch (e) {
+                console.warn('Could not get video ID:', e);
+            }
+
+            // Prevent rapid syncs but allow specific states like PAUSE immediately
             const now = Date.now();
-            if (now - lastActionTime < 500) return;
+            if (now - lastActionTime < 300 && state !== YT.PlayerState.PAUSED) return;
 
             // Update Firestore with current state
             updatePlayerState(state, currentTime, videoId);
@@ -876,7 +909,7 @@
 
         function onPlayerError(event) {
             console.error('YouTube player error:', event.data);
-            showMessage('YouTube player error. Please try a different video.', 'error');
+            // Don't show error to user immediately to avoid spam, just log it
         }
 
         async function updatePlayerState(state, currentTime, videoId) {
@@ -886,14 +919,21 @@
                 const isPlaying = (state === YT.PlayerState.PLAYING);
                 const lastUpdate = Date.now();
 
-                await db.collection('rooms').doc(currentRoomId).update({
+                const updateData = {
                     isPlaying: isPlaying,
                     currentTime: currentTime,
                     lastUpdate: lastUpdate,
                     lastUpdateBy: currentUser.uid
-                });
+                };
 
-                console.log('Updated player state:', { isPlaying, currentTime, videoId });
+                // Only update videoId if it's valid and different (or strictly if we want to force it)
+                if (videoId) {
+                    updateData.currentVideoId = videoId;
+                }
+
+                await db.collection('rooms').doc(currentRoomId).update(updateData);
+
+                // console.log('Updated player state:', { isPlaying, currentTime, videoId });
                 updateSyncStatus('Syncing...');
 
             } catch (error) {
@@ -1026,13 +1066,13 @@
             // Video controls
             searchVideoBtn.addEventListener('click', openSearchModal);
             playBtn.addEventListener('click', () => {
-                if (youtubePlayer) {
+                if (youtubePlayer && typeof youtubePlayer.playVideo === 'function') {
                     youtubePlayer.playVideo();
                     lastActionTime = Date.now();
                 }
             });
             pauseBtn.addEventListener('click', () => {
-                if (youtubePlayer) {
+                if (youtubePlayer && typeof youtubePlayer.pauseVideo === 'function') {
                     youtubePlayer.pauseVideo();
                     lastActionTime = Date.now();
                 }
@@ -1127,161 +1167,7 @@
             }
         }
 
-        // ==================== FIREBASE FUNCTIONS ====================
-        async function login() {
-            const email = document.getElementById('loginEmail').value;
-            const password = document.getElementById('loginPassword').value;
-            const rememberMe = document.getElementById('rememberMe').checked;
-
-            if (!email || !password) {
-                showMessage('Please enter email and password', 'error');
-                return;
-            }
-
-            showLoading('Logging in...');
-
-            try {
-                // Set persistence based heavily on user choice
-                const persistence = rememberMe
-                    ? firebase.auth.Auth.Persistence.LOCAL
-                    : firebase.auth.Auth.Persistence.SESSION;
-
-                await auth.setPersistence(persistence);
-                await auth.signInWithEmailAndPassword(email, password);
-                showMessage('Login successful!', 'success');
-            } catch (error) {
-                showMessage('Login failed: ' + error.message, 'error');
-                console.error('Login error:', error);
-            }
-        }
-
-        async function register() {
-            const username = document.getElementById('registerUsername').value;
-            const email = document.getElementById('registerEmail').value;
-            const password = document.getElementById('registerPassword').value;
-            const selectedAvatar = document.querySelector('.avatar-option.selected').getAttribute('data-avatar');
-
-            if (!username || !email || !password) {
-                showMessage('Please fill all fields', 'error');
-                return;
-            }
-
-            if (password.length < 6) {
-                showMessage('Password must be at least 6 characters', 'error');
-                return;
-            }
-
-            showLoading('Creating account...');
-
-            try {
-                // Create auth user
-                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
-                const user = userCredential.user;
-
-                // Save user profile to Firestore
-                await db.collection('users').doc(user.uid).set({
-                    username: username,
-                    email: email,
-                    avatar: selectedAvatar,
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    lastSeen: firebase.firestore.FieldValue.serverTimestamp()
-                });
-
-                showMessage('Account created successfully!', 'success');
-                showTab('room');
-            } catch (error) {
-                showMessage('Registration failed: ' + error.message, 'error');
-                console.error('Registration error:', error);
-            }
-        }
-
-        async function loginWithGoogle() {
-            showLoading('Connecting to Google...');
-
-            try {
-                const provider = new firebase.auth.GoogleAuthProvider();
-                provider.addScope('profile');
-                provider.addScope('email');
-
-                const result = await auth.signInWithPopup(provider);
-                showMessage('Signed in with Google!', 'success');
-
-            } catch (error) {
-                console.error('Google login error:', error);
-
-                if (error.code === 'auth/unauthorized-domain') {
-                    showMessage('Domain not authorized. Please contact site administrator.', 'error');
-                } else if (error.code === 'auth/popup-blocked') {
-                    showMessage('Popup was blocked by browser. Please allow popups for this site.', 'error');
-                } else if (error.code === 'auth/popup-closed-by-user') {
-                    showMessage('Login cancelled', 'info');
-                } else {
-                    showMessage('Google login failed: ' + error.message, 'error');
-                }
-            }
-        }
-
-        async function enterRoom() {
-            const action = document.querySelector('.room-action-btn.active').getAttribute('data-action');
-            const roomId = roomIdInput.value.trim().toUpperCase();
-
-            if (!roomId) {
-                showMessage('Please enter a room ID', 'error');
-                return;
-            }
-
-            showLoading(action === 'create' ? 'Creating room...' : 'Joining room...');
-
-            try {
-                if (action === 'create') {
-                    // Create room
-                    await db.collection('rooms').doc(roomId).set({
-                        createdBy: currentUser.uid,
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                        name: `${currentUser.displayName || 'User'}'s Anime Room`,
-                        users: [currentUser.uid],
-                        currentVideoId: null,
-                        currentVideoTitle: null,
-                        currentVideoUrl: null,
-                        isPlaying: false,
-                        currentTime: 0,
-                        lastUpdate: Date.now(),
-                        lastUpdateBy: currentUser.uid
-                    });
-                    showMessage(`Room ${roomId} created! Share this ID with friends.`, 'success');
-                } else {
-                    // Join room
-                    const roomDoc = await db.collection('rooms').doc(roomId).get();
-
-                    if (!roomDoc.exists) {
-                        showMessage('Room not found', 'error');
-                        return;
-                    }
-
-                    await db.collection('rooms').doc(roomId).update({
-                        users: firebase.firestore.FieldValue.arrayUnion(currentUser.uid)
-                    });
-                    showMessage(`Joined room ${roomId}!`, 'success');
-                }
-
-                // Set current room and show room interface
-                currentRoomId = roomId;
-                displayRoomId.textContent = roomId;
-
-                // Hide auth container and show room interface
-                authContainer.style.display = 'none';
-                roomInterface.style.display = 'block';
-
-                // Start listening to room updates
-                setupRoomListeners(roomId);
-
-            } catch (error) {
-                showMessage('Room error: ' + error.message, 'error');
-                console.error('Room error:', error);
-            }
-        }
-
-        function setupRoomListeners(roomId) {
+        async function setupRoomListeners(roomId) {
             // Stop previous listeners if exist
             if (roomUnsubscribe) {
                 roomUnsubscribe();
@@ -1297,14 +1183,25 @@
 
             // Start sync interval (sync every 1 second when playing for faster updates)
             syncInterval = setInterval(() => {
-                if (youtubePlayer && youtubePlayer.getPlayerState() === 1) { // Playing
-                    const currentTime = youtubePlayer.getCurrentTime();
-                    const now = Date.now();
+                if (youtubePlayer && playerReady && typeof youtubePlayer.getPlayerState === 'function') {
+                    const state = youtubePlayer.getPlayerState();
+                    if (state === 1) { // Playing
+                        const currentTime = youtubePlayer.getCurrentTime();
+                        const now = Date.now();
 
-                    // Only sync if enough time has passed (1s)
-                    if (now - lastSyncedTime > 1000) {
-                        updatePlayerState(1, currentTime, youtubePlayer.getVideoData().video_id);
-                        lastSyncedTime = now;
+                        // Only sync if enough time has passed (1s)
+                        if (now - lastSyncedTime > 1000) {
+                            // Safety check for videoData
+                            let videoId = '';
+                            try {
+                                videoId = youtubePlayer.getVideoData().video_id;
+                            } catch (e) {
+                                // ignore
+                            }
+
+                            updatePlayerState(1, currentTime, videoId);
+                            lastSyncedTime = now;
+                        }
                     }
                 }
             }, 1000);
@@ -1315,11 +1212,11 @@
                     const room = doc.data();
                     await updateRoomUsers(room.users || []);
 
-                    // Update video if exists
+                    // Update video info if exists
                     if (room.currentVideoId && room.currentVideoId !== '') {
                         videoInfo.style.display = 'block';
                         currentVideoTitle.textContent = room.currentVideoTitle || 'YouTube Video';
-                        currentVideoUrl.textContent = room.currentVideoUrl || '';
+                        currentVideoUrl.textContent = room.currentVideoUrl || `https://youtu.be/${room.currentVideoId}`;
 
                         // If this update is from another user, sync our player
                         if (room.lastUpdateBy !== currentUser?.uid) {
@@ -1345,35 +1242,56 @@
         }
 
         async function syncPlayerToRoom(room) {
-            if (!youtubePlayer || isSyncing) return;
+            // If local player isn't even created yet, or sync is locked
+            if (isSyncing) return;
+
+            // If the player doesn't exist yet but we have a video ID from the room
+            if (!youtubePlayer && room.currentVideoId) {
+                createYouTubePlayer(room.currentVideoId);
+                // The onReady will handle the rest implicitly if we wanted, 
+                // but let's allow this function to run when player is ready.
+                // For now, return and let the next snapshot or a retry handle it 
+                // typically the player creation is async so we can't sync immediately.
+                return;
+            }
+
+            if (!playerReady) return;
 
             isSyncing = true;
 
             try {
-                const currentVideoId = youtubePlayer.getVideoData().video_id;
+                let currentVideoId = '';
+                try {
+                    currentVideoId = youtubePlayer.getVideoData().video_id;
+                } catch (e) { }
 
                 // Check if video is different
-                if (currentVideoId !== room.currentVideoId) {
+                if (room.currentVideoId && currentVideoId !== room.currentVideoId) {
+                    console.log(`Sync: Charging video from ${currentVideoId} to ${room.currentVideoId}`);
                     // Load new video
-                    if (!playerReady) {
-                        createYouTubePlayer(room.currentVideoId);
-                    } else {
-                        youtubePlayer.loadVideoById(room.currentVideoId, room.currentTime || 0);
-                    }
-                } else {
+                    youtubePlayer.loadVideoById(room.currentVideoId, room.currentTime || 0);
+                    // loadVideoById automatically plays, so if room is paused we might need to pause it
+                    // but we'll check state below
+                }
+                else {
                     // Same video, sync time if difference is significant (optimized for perceived 0 latency)
                     const currentTime = youtubePlayer.getCurrentTime();
-                    // Tolerance reduced from 1s to 0.3s for tighter sync
-                    if (room.currentTime && Math.abs(currentTime - room.currentTime) > 0.3) {
+                    // Tolerance reduced to 0.5s
+                    if (room.currentTime && Math.abs(currentTime - room.currentTime) > 0.5) {
+                        // Only seek if we are far off, to avoid stuttering
                         youtubePlayer.seekTo(room.currentTime, true);
                     }
                 }
 
                 // Sync play state
                 const playerState = youtubePlayer.getPlayerState();
+
+                // If room says playing (true) and we are not playing or buffering
                 if (room.isPlaying && (playerState !== 1 && playerState !== 3)) {
                     youtubePlayer.playVideo();
-                } else if (!room.isPlaying && playerState === 1) {
+                }
+                // If room says paused (false) and we are playing
+                else if (!room.isPlaying && playerState === 1) {
                     youtubePlayer.pauseVideo();
                 }
 
@@ -1664,21 +1582,28 @@
                 const videoTitle = video.snippet.title;
                 const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
-                // Create YouTube player if it doesn't exist
-                if (!youtubePlayer) {
-                    createYouTubePlayer(videoId);
-                }
-
-                // Update room with selected video
+                // Update room with selected video first
                 await db.collection('rooms').doc(currentRoomId).update({
                     currentVideoId: videoId,
                     currentVideoTitle: videoTitle,
                     currentVideoUrl: videoUrl,
-                    isPlaying: false,
+                    isPlaying: true, // Auto play on new video
                     currentTime: 0,
                     lastUpdate: Date.now(),
                     lastUpdateBy: currentUser.uid
                 });
+
+                // FORCE LOCAL UPDATE FOR SENDER
+                if (!youtubePlayer) {
+                    createYouTubePlayer(videoId);
+                } else {
+                    if (playerReady) {
+                        youtubePlayer.loadVideoById(videoId, 0);
+                        youtubePlayer.playVideo(); // Ensure it plays
+                    } else {
+                        createYouTubePlayer(videoId); // Re-init if needed
+                    }
+                }
 
                 // Send a chat message about the video change
                 await sendSystemMessage(`${currentUser.displayName || 'User'} changed the video to: ${videoTitle}`);
@@ -1703,21 +1628,28 @@
             }
 
             try {
-                // Create YouTube player if it doesn't exist
-                if (!youtubePlayer) {
-                    createYouTubePlayer(videoId);
-                }
-
                 // Update room with video
                 await db.collection('rooms').doc(currentRoomId).update({
                     currentVideoId: videoId,
                     currentVideoTitle: 'YouTube Video',
                     currentVideoUrl: url,
-                    isPlaying: false,
+                    isPlaying: true,
                     currentTime: 0,
                     lastUpdate: Date.now(),
                     lastUpdateBy: currentUser.uid
                 });
+
+                // FORCE LOCAL UPDATE FOR SENDER
+                if (!youtubePlayer) {
+                    createYouTubePlayer(videoId);
+                } else {
+                    if (playerReady) {
+                        youtubePlayer.loadVideoById(videoId, 0);
+                        youtubePlayer.playVideo();
+                    } else {
+                        createYouTubePlayer(videoId);
+                    }
+                }
 
                 // Send system message
                 await sendSystemMessage(`${currentUser.displayName || 'User'} loaded a video from URL`);
@@ -1791,3 +1723,4 @@
 </body>
 
 </html>
+
