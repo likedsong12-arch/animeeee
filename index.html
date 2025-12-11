@@ -776,6 +776,12 @@
         const auth = firebase.auth();
         const db = firebase.firestore();
 
+        // Debugging: Alert errors
+        window.onerror = function (msg, url, line, col, error) {
+            alert("Error: " + msg + "\nLine: " + line + "\nColumn: " + col);
+            return false;
+        };
+
         // ==================== APP STATE ====================
         let currentUser = null;
         let currentRoomId = null;
@@ -965,6 +971,8 @@
         document.addEventListener('DOMContentLoaded', initApp);
 
         function initApp() {
+            console.log('App Initializing...');
+            // alert('App Initializing...'); // Uncomment if needed, but error handler is better
             createParticles();
             setupEventListeners();
 
