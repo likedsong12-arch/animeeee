@@ -954,6 +954,8 @@
 
                 const isPlaying = (state === YT.PlayerState.PLAYING);
 
+                console.log(`[Host] Broadcasting State: ${isPlaying ? 'PLAYING' : 'PAUSED'} at ${currentTime}`);
+
                 const updateData = {
                     isPlaying: isPlaying,
                     currentTime: currentTime,
@@ -1481,10 +1483,21 @@
 
         async function syncPlayerToRoom(room) {
             // STRICT CLIENT RULE: Host NEVER listens
-            if (isHost()) return;
+            if (isHost()) {
+                console.log("[Sync] I am Host, ignoring remote update");
+                return;
+            }
+
+            // Console log the incoming update
+            console.log(`[Sync] Incoming Update - Playing: ${room.isPlaying}, Time: ${room.currentTime}`);
 
             // Local sync lock (Anti-Echo)
-            if (isSyncing || !youtubePlayer || !playerReady) return;
+            if (isSyncing || !youtubePlayer || !playerReady) {
+                if (isSyncing) console.log("[Sync] Locked (isSyncing)");
+                if (!youtubePlayer) console.log("[Sync] Locked (no youtubePlayer)");
+                if (!playerReady) console.log("[Sync] Locked (player not ready)");
+                return;
+            }
 
             // 1. Video ID Check
             let currentVideoId = '';
@@ -1511,8 +1524,11 @@
             const IAmPlaying = (youtubePlayer.getPlayerState() === 1);
 
             if (timeDiff < 0.3 && hostIsPlaying === IAmPlaying) {
+                console.log("[Sync] Drift < 0.3s and State Matches. No action.");
                 return;
             }
+
+            console.log(`[Sync] Action Required. Host: ${hostIsPlaying}, Me: ${IAmPlaying}, Drift: ${timeDiff.toFixed(3)}s`);
 
             isSyncing = true;
             updateSyncStatus('Syncing...');
@@ -1524,6 +1540,7 @@
                 if (hostIsPlaying) {
                     // Host is playing
                     if (playerState !== 1 && playerState !== 3) { // If not playing or buffering
+                        console.log("[Sync] Triggering Play");
                         youtubePlayer.playVideo();
                     }
 
