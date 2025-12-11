@@ -935,6 +935,12 @@
             // STRICT HOST RULE: Only Host sends updates
             if (!currentRoomId || !currentUser || !isHost()) return;
 
+            // CRITICAL: Do not broadcast if we are currently syncing (loading a new video/seeking)
+            if (isSyncing) {
+                // console.log('[Host] blocked broadcast due to isSyncing');
+                return;
+            }
+
             try {
                 // Buffer state: Just report ready, don't change playback
                 if (state === YT.PlayerState.BUFFERING) {
@@ -1411,6 +1417,8 @@
 
             // Start sync interval (sync every 1 second when playing for faster updates)
             syncInterval = setInterval(() => {
+                if (isSyncing) return; // Don't sync if we are busy
+
                 if (youtubePlayer && playerReady && typeof youtubePlayer.getPlayerState === 'function') {
                     const state = youtubePlayer.getPlayerState();
                     if (state === 1) { // Playing
@@ -1502,11 +1510,17 @@
             } catch (e) { }
 
             if (room.currentVideoId && currentVideoId !== room.currentVideoId) {
-                console.log(`[Sync] Changing video to ${room.currentVideoId}`);
+                console.log(`[Sync] Changing video from ${currentVideoId} to ${room.currentVideoId}`);
                 isSyncing = true;
-                youtubePlayer.loadVideoById(room.currentVideoId, 0); // Reset to 0 for new video
 
-                // If Host loaded it, they will start broadcasting the new state shortly
+                // Force load
+                youtubePlayer.loadVideoById(room.currentVideoId, 0);
+
+                // If Host, ensure we take control
+                if (amHost) {
+                    console.log('[Sync] Host loaded new video, taking control.');
+                }
+
                 setTimeout(() => isSyncing = false, 1000);
                 return;
             }
